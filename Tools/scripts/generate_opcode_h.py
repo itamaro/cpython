@@ -11,9 +11,16 @@ header = """
 extern "C" {
 #endif
 
+/* Instruction opcodes for compiled code */
+#define PY_OPCODES(X)""".lstrip()
 
-    /* Instruction opcodes for compiled code */
-""".lstrip()
+middle = """
+
+#define OP(op, value) static const int op = value;
+PY_OPCODES(OP)
+#undef OP
+
+"""
 
 footer = """
 #define HAS_ARG(op) ((op) >= HAVE_ARGUMENT)
@@ -29,6 +36,9 @@ footer = """
 """
 
 UINT32_MASK = (1<<32)-1
+
+def write_opcode_line(name, code, width, out):
+    out.write(' \\\n  X(%s, %*d)' % (name, width - len(name), code))
 
 def write_int_array_from_ops(name, ops, out):
     bits = 0
@@ -56,23 +66,26 @@ def main(opcode_py, outfile='Include/opcode.h'):
     hasjabs = opcode['hasjabs']
     used = [ False ] * 256
     next_op = 1
-    for name, op in opmap.items():
+    for op in opmap.values():
         used[op] = True
+    all_names = opmap.keys() | opcode['_specialized_instructions']
+    longest_opname = max(all_names, key=len)
+    width = len(longest_opname) + 3 # for 3-digit opcode length
     with open(outfile, 'w') as fobj:
         fobj.write(header)
         for name in opcode['opname']:
             if name in opmap:
-                fobj.write("#define %-23s %3s\n" % (name, opmap[name]))
+                write_opcode_line(name, opmap[name], width, fobj)
             if name == 'POP_EXCEPT': # Special entry for HAVE_ARGUMENT
-                fobj.write("#define %-23s %3d\n" %
-                            ('HAVE_ARGUMENT', opcode['HAVE_ARGUMENT']))
+                write_opcode_line('HAVE_ARGUMENT', opcode['HAVE_ARGUMENT'], width, fobj)
 
         for name in opcode['_specialized_instructions']:
             while used[next_op]:
                 next_op += 1
-            fobj.write("#define %-23s %3s\n" % (name, next_op))
+            write_opcode_line(name, next_op, width, fobj)
             used[next_op] = True
-        fobj.write("#define DO_TRACING              255\n")
+        write_opcode_line("DO_TRACING", 255, width, fobj)
+        fobj.write(middle)
         fobj.write("#ifdef NEED_OPCODE_JUMP_TABLES\n")
         write_int_array_from_ops("_PyOpcode_RelativeJump", opcode['hasjrel'], fobj)
         write_int_array_from_ops("_PyOpcode_Jump", opcode['hasjrel'] + opcode['hasjabs'], fobj)
@@ -85,7 +98,6 @@ def main(opcode_py, outfile='Include/opcode.h'):
         fobj.write("\n    )\n")
 
         fobj.write(footer)
-
 
     print("%s regenerated from %s" % (outfile, opcode_py))
 
