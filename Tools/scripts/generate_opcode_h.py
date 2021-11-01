@@ -12,15 +12,7 @@ extern "C" {
 #endif
 
 /* Instruction opcodes for compiled code */
-#define PY_OPCODES(X)""".lstrip()
-
-middle = """
-
-#define OP(op, value) static const int op = value;
-PY_OPCODES(OP)
-#undef OP
-
-"""
+""".lstrip()
 
 footer = """
 #define HAS_ARG(op) ((op) >= HAVE_ARGUMENT)
@@ -36,9 +28,6 @@ footer = """
 """
 
 UINT32_MASK = (1<<32)-1
-
-def write_opcode_line(name, code, width, out):
-    out.write(' \\\n  X(%s, %*d)' % (name, width - len(name), code))
 
 def write_int_array_from_ops(name, ops, out):
     bits = 0
@@ -68,25 +57,35 @@ def main(opcode_py, outfile='Include/opcode.h'):
     next_op = 1
     for op in opmap.values():
         used[op] = True
-    all_names = opmap.keys() | opcode['_specialized_instructions']
-    longest_opname = max(all_names, key=len)
-    width = len(longest_opname) + 3 # for 3-digit opcode length
+
+    opcodes_list = []
+    for name in opcode['opname']:
+        if name in opmap:
+            opcodes_list.append((name, opmap[name]))
+        if name == 'POP_EXCEPT': # Special entry for HAVE_ARGUMENT
+            opcodes_list.append(('HAVE_ARGUMENT', opcode['HAVE_ARGUMENT']))
+    for name in opcode['_specialized_instructions']:
+        while used[next_op]:
+            next_op += 1
+        opcodes_list.append((name, next_op))
+        used[next_op] = True
+    opcodes_list.append(('DO_TRACING', 255))
+    longest_opname = max(opcodes_list, key=lambda x: len(x[0]))
+    width = len(longest_opname[0]) + 3 # for 3-digit opcode length
+
     with open(outfile, 'w') as fobj:
         fobj.write(header)
-        for name in opcode['opname']:
-            if name in opmap:
-                write_opcode_line(name, opmap[name], width, fobj)
-            if name == 'POP_EXCEPT': # Special entry for HAVE_ARGUMENT
-                write_opcode_line('HAVE_ARGUMENT', opcode['HAVE_ARGUMENT'], width, fobj)
 
-        for name in opcode['_specialized_instructions']:
-            while used[next_op]:
-                next_op += 1
-            write_opcode_line(name, next_op, width, fobj)
-            used[next_op] = True
-        write_opcode_line("DO_TRACING", 255, width, fobj)
-        fobj.write(middle)
-        fobj.write("#ifdef NEED_OPCODE_JUMP_TABLES\n")
+        # write out #define lines for opcodes
+        for opname, opnum in opcodes_list:
+            fobj.write('#define %s %*d\n' % (opname, width - len(opname), opnum))
+
+        # write out X-Macro for opcodes
+        fobj.write('\n#define PY_OPCODES(X)')
+        for opname, opnum in opcodes_list:
+            fobj.write(' \\\n  X(%s, %*d)' % (opname, width - len(opname), opnum))
+
+        fobj.write("\n\n#ifdef NEED_OPCODE_JUMP_TABLES\n")
         write_int_array_from_ops("_PyOpcode_RelativeJump", opcode['hasjrel'], fobj)
         write_int_array_from_ops("_PyOpcode_Jump", opcode['hasjrel'] + opcode['hasjabs'], fobj)
         fobj.write("#endif /* OPCODE_TABLES */\n")
