@@ -119,6 +119,7 @@ const uint8_t _PyOpcode_Deopt[256] = {
     [DELETE_SUBSCR] = DELETE_SUBSCR,
     [DICT_MERGE] = DICT_MERGE,
     [DICT_UPDATE] = DICT_UPDATE,
+    [EAGER_IMPORT_NAME] = EAGER_IMPORT_NAME,
     [END_ASYNC_FOR] = END_ASYNC_FOR,
     [EXTENDED_ARG] = EXTENDED_ARG,
     [EXTENDED_ARG_QUICK] = EXTENDED_ARG,
@@ -300,6 +301,7 @@ const uint8_t _PyOpcode_Original[256] = {
     [DELETE_SUBSCR] = DELETE_SUBSCR,
     [DICT_MERGE] = DICT_MERGE,
     [DICT_UPDATE] = DICT_UPDATE,
+    [EAGER_IMPORT_NAME] = EAGER_IMPORT_NAME,
     [END_ASYNC_FOR] = END_ASYNC_FOR,
     [EXTENDED_ARG] = EXTENDED_ARG_QUICK,
     [EXTENDED_ARG_QUICK] = EXTENDED_ARG_QUICK,
@@ -526,7 +528,7 @@ static const char *const _PyOpcode_OpName[256] = {
     [BUILD_MAP] = "BUILD_MAP",
     [LOAD_ATTR] = "LOAD_ATTR",
     [COMPARE_OP] = "COMPARE_OP",
-    [IMPORT_NAME] = "IMPORT_NAME",
+    [EAGER_IMPORT_NAME] = "EAGER_IMPORT_NAME",
     [IMPORT_FROM] = "IMPORT_FROM",
     [JUMP_FORWARD] = "JUMP_FORWARD",
     [JUMP_IF_FALSE_OR_POP] = "JUMP_IF_FALSE_OR_POP",
@@ -595,8 +597,8 @@ static const char *const _PyOpcode_OpName[256] = {
     [POP_JUMP_BACKWARD_IF_NONE] = "POP_JUMP_BACKWARD_IF_NONE",
     [POP_JUMP_BACKWARD_IF_FALSE] = "POP_JUMP_BACKWARD_IF_FALSE",
     [POP_JUMP_BACKWARD_IF_TRUE] = "POP_JUMP_BACKWARD_IF_TRUE",
+    [IMPORT_NAME] = "IMPORT_NAME",
     [UNPACK_SEQUENCE_TWO_TUPLE] = "UNPACK_SEQUENCE_TWO_TUPLE",
-    [178] = "<178>",
     [179] = "<179>",
     [180] = "<180>",
     [181] = "<181>",
@@ -678,7 +680,6 @@ static const char *const _PyOpcode_OpName[256] = {
 #endif
 
 #define EXTRA_CASES \
-    case 178: \
     case 179: \
     case 180: \
     case 181: \
