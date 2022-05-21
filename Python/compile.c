@@ -1625,7 +1625,8 @@ compiler_addop_j_noline(struct compiler *c, int opcode, basicblock *b)
 }
 
 #define ADDOP_IMPORT(C, O, TYPE) { \
-    if (((C)->u->u_scope_type == COMPILER_SCOPE_MODULE) \
+    if ((((C)->u->u_scope_type == COMPILER_SCOPE_MODULE) || \
+         ((C)->u->u_scope_type == COMPILER_SCOPE_CLASS)) \
         && ((C)->u->u_nfblocks == 0)) { \
         ADDOP_NAME((C), IMPORT_NAME, (O), TYPE); \
     } else { \
