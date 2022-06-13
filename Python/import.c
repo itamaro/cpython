@@ -1792,7 +1792,9 @@ PyImport_EagerImportName(PyObject *builtins, PyObject *globals, PyObject *locals
     stack[2] = locals == NULL ? Py_None : locals;
     stack[3] = fromlist;
     stack[4] = level;
-    res = _PyObject_FastCall(import_func, stack, 5);
+    // TODO why switch from fastcall to vectorcall here?
+    res = _PyObject_Vectorcall(import_func, stack, 5, NULL);
+    // res = _PyObject_FastCall(import_func, stack, 5);
     Py_DECREF(import_func);
     return res;
 }
