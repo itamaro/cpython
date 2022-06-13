@@ -1755,6 +1755,62 @@ import_find_and_load(PyThreadState *tstate, PyObject *abs_name)
 }
 
 PyObject *
+_PyImport_LazyImportModuleLevelObject(
+    PyObject *globals,
+    PyObject *locals,
+    PyObject *name,
+    PyObject *fromlist,
+    int level
+    )
+{
+    PyThreadState *tstate = _PyThreadState_GET();
+    PyObject *zero = NULL;
+    PyObject *lazy_module = NULL;
+    PyObject *abs_name = NULL;
+
+    if (level > 0) {
+        assert(level == 0); // TODO remove
+        abs_name = resolve_name(tstate, name, globals, level);
+        if (abs_name == NULL) {
+            goto error;
+        }
+    } else {  /* level == 0 */
+        if (PyUnicode_GET_LENGTH(name) == 0) {
+            PyErr_SetString(PyExc_ValueError, "Empty module name");
+            goto error;
+        }
+        abs_name = name;
+        Py_INCREF(abs_name);
+    }
+
+    zero = PyLong_FromLong(0);
+    lazy_module = PyLazyImportModule_NewObject(abs_name, globals, locals, fromlist, zero);
+
+    if (lazy_module != NULL) {
+        PyInterpreterState *interp = _PyInterpreterState_GET();
+        if (interp->lazy_loaded == NULL) {
+            interp->lazy_loaded = PySet_New(NULL);
+            if (!interp->lazy_loaded)
+                goto error;
+        }
+        /* Crazy side-effects! */
+        PyObject *type, *value, *traceback;
+        PyErr_Fetch(&type, &value, &traceback);
+        // nothing else to do if the module is already loaded (lazily or not)
+        if (!PySet_Contains(interp->lazy_loaded, abs_name) && (PyImport_GetModule(abs_name) == NULL)) {
+            Py_ssize_t dot = PyUnicode_FindChar(abs_name, '.', 0, PyUnicode_GET_LENGTH(abs_name), -1);
+            assert(dot < 0); // TODO remove
+        }
+        PyErr_Restore(type, value, traceback);
+    }
+
+  error:
+    Py_XDECREF(abs_name);
+    Py_XDECREF(zero);
+    return lazy_module;
+}
+
+PyObject *
 PyImport_EagerImportName(PyObject *builtins, PyObject *globals, PyObject *locals,
                          PyObject *name, PyObject *fromlist, PyObject *level)
 {
@@ -1832,6 +1888,10 @@ PyImport_ImportName(PyObject *builtins, PyObject *globals, PyObject *locals,
     if (verbose) {
         fprintf(stderr, "# lazy import '%s'\n", PyUnicode_AsUTF8(name));
     }
+
+    // TODO(lazy_imports): run `name` through `eager_imports` filter function
+    PyObject *lazy =  _PyImport_LazyImportModuleLevelObject(globals, locals, name, fromlist, ilevel);
+
     return PyImport_EagerImportName(builtins, globals, locals, name, fromlist, level);
 }
 
