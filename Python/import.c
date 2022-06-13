@@ -1810,6 +1810,25 @@ PyImport_ImportName(PyObject *builtins, PyObject *globals, PyObject *locals,
     if (!lazy_imports_enabled) {
         return PyImport_EagerImportName(builtins, globals, locals, name, fromlist, level);
     }
+    int ilevel = _PyLong_AsInt(level);
+    if (ilevel == -1 && PyErr_Occurred()) {
+        return NULL;
+    }
+
+    // limiting cases of actual laziness for incremental implementation & debugging
+    if (ilevel != 0) {
+        if (verbose) fprintf(stderr, "# NOT READY FOR lazy import '%s' (level=%d)\n", PyUnicode_AsUTF8(name), ilevel);
+        return PyImport_EagerImportName(builtins, globals, locals, name, fromlist, level);
+    }
+    if ((fromlist != NULL) && !Py_IsNone(fromlist)) {
+        if (verbose) fprintf(stderr, "# NOT READY FOR lazy import '%s' (non-empty fromlist)\n", PyUnicode_AsUTF8(name));
+        return PyImport_EagerImportName(builtins, globals, locals, name, fromlist, level);
+    }
+    if (PyUnicode_FindChar(name, '.', 0, PyUnicode_GET_LENGTH(name), -1) >= 0) {
+        if (verbose) fprintf(stderr, "# NOT READY FOR lazy import '%s' (dotted import)\n", PyUnicode_AsUTF8(name));
+        return PyImport_EagerImportName(builtins, globals, locals, name, fromlist, level);
+    }
+
     if (verbose) {
         fprintf(stderr, "# lazy import '%s'\n", PyUnicode_AsUTF8(name));
     }
