@@ -3955,7 +3955,7 @@ handle_eval_breaker:
             PyObject *level = TOP();
             PyObject *res;
             res = PyImport_EagerImportName(
-                frame->f_builtins, frame->f_globals, frame->f_locals, name, fromlist, level);
+                frame->f_builtins, frame->f_globals, frame->f_locals, name, fromlist, level, NULL);
             Py_DECREF(level);
             Py_DECREF(fromlist);
             SET_TOP(res);

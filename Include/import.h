@@ -94,8 +94,8 @@ PyObject * PyImport_EagerImportName(
     PyObject *locals,
     PyObject *name,
     PyObject *fromlist,
-    PyObject *level
-    );
+    PyObject *level,
+    PyObject *lazy_loaded);
 PyObject * PyImport_ImportName(
     PyObject *builtins,
     PyObject *globals,
