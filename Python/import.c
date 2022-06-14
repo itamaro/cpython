@@ -1892,7 +1892,7 @@ PyImport_ImportName(PyObject *builtins, PyObject *globals, PyObject *locals,
     // TODO(lazy_imports): run `name` through `eager_imports` filter function
     PyObject *lazy =  _PyImport_LazyImportModuleLevelObject(globals, locals, name, fromlist, ilevel);
 
-    return PyImport_EagerImportName(builtins, globals, locals, name, fromlist, level);
+    return PyImport_LoadLazyImport(lazy);
 }
 
 PyObject *
@@ -1966,6 +1966,50 @@ _PyImport_ImportFrom(PyThreadState *tstate, PyObject *v, PyObject *name)
     Py_XDECREF(pkgname_or_unknown);
     Py_XDECREF(pkgpath);
     return NULL;
+}
+
+static PyObject *
+_imp_load_lazy_import_impl(PyLazyImport *lazy_import)  // was _imp_import_deferred_impl(PyDeferredObject *d)
+{
+    PyObject *obj;
+    assert(lazy_import->lz_next == NULL); // TODO remove
+    assert(lazy_import->lz_lazy_import == NULL); // TODO remove
+    if (lazy_import->lz_lazy_import == NULL) {
+        PyInterpreterState *interp = _PyInterpreterState_GET();
+        PyObject *lazy_loaded = interp->lazy_loaded;
+        Py_XINCREF(lazy_loaded);
+        obj = PyImport_EagerImportName(PyEval_GetBuiltins(),
+                                       lazy_import->lz_globals,
+                                       lazy_import->lz_locals,
+                                       lazy_import->lz_name,
+                                       lazy_import->lz_fromlist,
+                                       lazy_import->lz_level);
+                                    //    lazy_loaded);
+        Py_XDECREF(lazy_loaded);
+        if (obj == NULL) {
+            return NULL;
+        }
+    } else {
+        return NULL;
+    }
+    return obj;
+}
+
+PyObject *
+PyImport_LoadLazyImport(PyObject *lazy_import)
+{
+    assert(lazy_import != NULL);
+    assert(PyLazyImport_CheckExact(lazy_import));
+    PyLazyImport *lz = (PyLazyImport *)lazy_import;
+    PyObject *obj = lz->lz_obj;
+    if (obj == NULL) {
+        obj = _imp_load_lazy_import_impl(lz);
+        if (obj != NULL) {
+            lz->lz_obj = obj;
+            Py_INCREF(lz->lz_obj); // this INCREF is not in the OP impl, but crashes without it
+        }
+    }
+    return obj;
 }
 
 PyObject *
