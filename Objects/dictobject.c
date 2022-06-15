@@ -1055,7 +1055,7 @@ comparison raises an exception.
 When the key isn't found a DKIX_EMPTY is returned.
 */
 Py_ssize_t
-_Py_dict_lookup(PyDictObject *mp, PyObject *key, Py_hash_t hash, PyObject **value_addr)
+dict_lookup_impl(PyDictObject *mp, PyObject *key, Py_hash_t hash, PyObject **value_addr, int resolve_lazy_imports)
 {
     PyObject *value;
     PyDictKeysObject *dk;
@@ -1097,6 +1097,23 @@ start:
 
     *value_addr = value;
     return ix;
+}
+
+/*
+_Py_dict_lookup() is general-purpose, and may return DKIX_ERROR if (and only if) a
+comparison raises an exception.
+When the key isn't found a DKIX_EMPTY is returned.
+*/
+Py_ssize_t
+_Py_dict_lookup(PyDictObject *mp, PyObject *key, Py_hash_t hash, PyObject **value_addr)
+{
+    return dict_lookup_impl(mp, key, hash, value_addr, 1);
+}
+
+Py_ssize_t
+dict_lookup_keep_lazy(PyDictObject *mp, PyObject *key, Py_hash_t hash, PyObject **value_addr)
+{
+    return dict_lookup_impl(mp, key, hash, value_addr, 0);
 }
 
 int
