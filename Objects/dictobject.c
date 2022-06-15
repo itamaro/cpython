@@ -1057,11 +1057,13 @@ When the key isn't found a DKIX_EMPTY is returned.
 Py_ssize_t
 _Py_dict_lookup(PyDictObject *mp, PyObject *key, Py_hash_t hash, PyObject **value_addr)
 {
+    PyObject *value;
     PyDictKeysObject *dk;
     Py_ssize_t ix;
 
 start:
     dk = mp->ma_keys;
+    value = NULL;
 
     if (!DK_IS_GENERIC(dk)) {
         if (PyUnicode_CheckExact(key)) {
@@ -1076,14 +1078,11 @@ start:
 
         if (ix >= 0) {
             if (DK_IS_SPLIT(dk)) {
-                *value_addr = mp->ma_values->values[ix];
+                value = mp->ma_values->values[ix];
             }
             else {
-                *value_addr = DK_UNICODE_ENTRIES(dk)[ix].me_value;
+                value = DK_UNICODE_ENTRIES(dk)[ix].me_value;
             }
-        }
-        else {
-            *value_addr = NULL;
         }
     }
     else {
@@ -1092,13 +1091,11 @@ start:
             goto start;
         }
         if (ix >= 0) {
-            *value_addr = DK_ENTRIES(dk)[ix].me_value;
-        }
-        else {
-            *value_addr = NULL;
+            value = DK_ENTRIES(dk)[ix].me_value;
         }
     }
 
+    *value_addr = value;
     return ix;
 }
 
