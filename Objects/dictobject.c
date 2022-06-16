@@ -2096,7 +2096,7 @@ _PyDict_DelItem_KnownHash(PyObject *op, PyObject *key, Py_hash_t hash)
     assert(key);
     assert(hash != -1);
     mp = (PyDictObject *)op;
-    ix = _Py_dict_lookup(mp, key, hash, &old_value);
+    ix = dict_lookup_keep_lazy(mp, key, hash, &old_value);
     if (ix == DKIX_ERROR || ix == DKIX_VALUE_ERROR)
         return -1;
     if (ix == DKIX_EMPTY || old_value == NULL) {
@@ -2130,7 +2130,7 @@ _PyDict_DelItemIf(PyObject *op, PyObject *key,
     if (hash == -1)
         return -1;
     mp = (PyDictObject *)op;
-    ix = _Py_dict_lookup(mp, key, hash, &old_value);
+    ix = dict_lookup_keep_lazy(mp, key, hash, &old_value);
     if (ix == DKIX_ERROR || ix == DKIX_VALUE_ERROR)
         return -1;
     if (ix == DKIX_EMPTY || old_value == NULL) {
@@ -3266,7 +3266,7 @@ dict_equal(PyDictObject *a, PyDictObject *b)
             /* ditto for key */
             Py_INCREF(key);
             /* reuse the known hash value */
-            _Py_dict_lookup(b, key, hash, &bval);
+            dict_lookup_keep_lazy(b, key, hash, &bval);
             if (bval == NULL) {
                 Py_DECREF(key);
                 Py_DECREF(aval);
@@ -3332,7 +3332,7 @@ dict___contains__(PyDictObject *self, PyObject *key)
         if (hash == -1)
             return NULL;
     }
-    ix = _Py_dict_lookup(mp, key, hash, &value);
+    ix = dict_lookup_keep_lazy(mp, key, hash, &value);
     if (ix == DKIX_ERROR || ix == DKIX_VALUE_ERROR)
         return NULL;
     if (ix == DKIX_EMPTY || value == NULL)
@@ -3779,7 +3779,7 @@ PyDict_Contains(PyObject *op, PyObject *key)
         if (hash == -1)
             return -1;
     }
-    ix = _Py_dict_lookup(mp, key, hash, &value);
+    ix = dict_lookup_keep_lazy(mp, key, hash, &value);
     if (ix == DKIX_ERROR || ix == DKIX_VALUE_ERROR)
         return -1;
     return (ix != DKIX_EMPTY && value != NULL);
@@ -3793,7 +3793,7 @@ _PyDict_Contains_KnownHash(PyObject *op, PyObject *key, Py_hash_t hash)
     PyObject *value;
     Py_ssize_t ix;
 
-    ix = _Py_dict_lookup(mp, key, hash, &value);
+    ix = dict_lookup_keep_lazy(mp, key, hash, &value);
     if (ix == DKIX_ERROR || ix == DKIX_VALUE_ERROR)
         return -1;
     return (ix != DKIX_EMPTY && value != NULL);
