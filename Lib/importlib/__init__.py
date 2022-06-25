@@ -62,6 +62,12 @@ import warnings
 from ._bootstrap import __import__
 
 
+def set_lazy_imports():
+    """Call set_lazy_imports() to enable Lazy Imports.
+    The imported modules after this point will be lazily imported."""
+    _imp.set_lazy_imports()
+
+
 def invalidate_caches():
     """Call the invalidate_caches() method on all meta path finders stored in
     sys.meta_path (where implemented)."""
