@@ -68,6 +68,20 @@ def set_lazy_imports():
     _imp.set_lazy_imports()
 
 
+class eager_imports:
+    """A context manager that forces imports executed within to be
+       executed eagerly even if lazy imports are enabled.
+
+    Note that the implementation is intentionally trivial,
+    since imports inside *any* with block *always* execute eagerly.
+    """
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        pass
+
+
 def invalidate_caches():
     """Call the invalidate_caches() method on all meta path finders stored in
     sys.meta_path (where implemented)."""
