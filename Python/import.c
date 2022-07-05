@@ -2009,9 +2009,19 @@ PyImport_LoadLazyImport(PyObject *lazy_import)
     PyObject *obj = lz->lz_obj;
     if (obj == NULL) {
         obj = _imp_load_lazy_import_impl(lz);
+
         if (obj != NULL) {
             lz->lz_obj = obj;
             Py_INCREF(lz->lz_obj); // this INCREF is not in the OP impl, but crashes without it
+        } else {
+            PyThreadState *tstate = _PyThreadState_GET();
+            // only preserve the most recent (innermost) LazyImportError
+            if (tstate->curexc_type != PyExc_LazyImportError) {
+                _PyErr_FormatFromCauseTstate(
+                    tstate, PyExc_LazyImportError,
+                    "Error occurred when loading a lazy import. Original import was at file %S, line %d",
+                    lz->lz_filename, lz->lz_lineno);
+            }
         }
     }
     return obj;
