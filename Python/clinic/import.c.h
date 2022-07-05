@@ -576,6 +576,24 @@ _imp_set_lazy_imports(PyObject *module, PyObject *Py_UNUSED(ignored))
     return _imp_set_lazy_imports_impl(module);
 }
 
+PyDoc_STRVAR(_imp_is_lazy_imports_enabled__doc__,
+"is_lazy_imports_enabled($module, /)\n"
+"--\n"
+"\n"
+"Return True is lazy imports is currently enabled.");
+
+#define _IMP_IS_LAZY_IMPORTS_ENABLED_METHODDEF    \
+    {"is_lazy_imports_enabled", (PyCFunction)_imp_is_lazy_imports_enabled, METH_NOARGS, _imp_is_lazy_imports_enabled__doc__},
+
+static PyObject *
+_imp_is_lazy_imports_enabled_impl(PyObject *module);
+
+static PyObject *
+_imp_is_lazy_imports_enabled(PyObject *module, PyObject *Py_UNUSED(ignored))
+{
+    return _imp_is_lazy_imports_enabled_impl(module);
+}
+
 #ifndef _IMP_CREATE_DYNAMIC_METHODDEF
     #define _IMP_CREATE_DYNAMIC_METHODDEF
 #endif /* !defined(_IMP_CREATE_DYNAMIC_METHODDEF) */
@@ -583,4 +601,4 @@ _imp_set_lazy_imports(PyObject *module, PyObject *Py_UNUSED(ignored))
 #ifndef _IMP_EXEC_DYNAMIC_METHODDEF
     #define _IMP_EXEC_DYNAMIC_METHODDEF
 #endif /* !defined(_IMP_EXEC_DYNAMIC_METHODDEF) */
-/*[clinic end generated code: output=79bcb0de354554d6 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=2cb0591b62658022 input=a9049054013a1b77]*/
