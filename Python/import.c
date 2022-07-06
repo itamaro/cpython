@@ -1897,7 +1897,9 @@ PyImport_ImportName(PyObject *builtins, PyObject *globals, PyObject *locals,
     // TODO(lazy_imports): run `name` through `eager_imports` filter function
     PyObject *lazy =  _PyImport_LazyImportModuleLevelObject(globals, locals, name, fromlist, ilevel);
 
-    return PyImport_LoadLazyImport(lazy);
+    // return PyImport_LoadLazyImport(lazy);
+    return lazy;
+    // return PyImport_EagerImportName(builtins, globals, locals, name, fromlist, level);
 }
 
 PyObject *
@@ -1978,6 +1980,14 @@ _imp_load_lazy_import_impl(PyLazyImport *lazy_import)  // was _imp_import_deferr
 {
     PyObject *obj;
     assert(lazy_import->lz_next == NULL); // TODO remove
+    // if (lazy_import->lz_next != NULL) {
+    //     fprintf(stderr, "resolving lz_next\n");
+    //     PyObject *value = _imp_load_lazy_import_impl((PyLazyImport *)lazy_import->lz_next);
+    //     if (value == NULL) {
+    //         return NULL;
+    //     }
+    //     Py_DECREF(value);
+    // }
     assert(lazy_import->lz_lazy_import == NULL); // TODO remove
     if (lazy_import->lz_lazy_import == NULL) {
         PyInterpreterState *interp = _PyInterpreterState_GET();
@@ -1996,6 +2006,24 @@ _imp_load_lazy_import_impl(PyLazyImport *lazy_import)  // was _imp_import_deferr
         }
     } else {
         return NULL;
+        // PyObject *from = _imp_load_lazy_import_impl((PyLazyImport *)lazy_import->lz_lazy_import);
+        // if (from == NULL) {
+        //     return NULL;
+        // }
+        // PyThreadState *tstate = _PyThreadState_GET();
+        // obj = _PyImport_ImportFrom(tstate, from, lazy_import->lz_name);
+        // Py_DECREF(from);
+        // if (obj == NULL) {
+        //     return NULL;
+        // }
+        // if (PyLazyImport_CheckExact(obj)) {
+        //     PyObject *value = _imp_load_lazy_import_impl((PyLazyImport *)obj);
+        //     Py_DECREF(obj);
+        //     if (value == NULL) {
+        //         return NULL;
+        //     }
+        //     obj = value;
+        // }
     }
     return obj;
 }

@@ -1100,6 +1100,7 @@ start:
     }
 
     if (resolve_lazy_imports && value && PyLazyImport_CheckExact(value)) {
+        // PyObject *msg = PyUnicode_FromFormat("\033[92m %R \033[0m", ((PyLazyImport*)value)->lz_name); fprintf(stderr, ":::resolving %s\n", msg ? PyUnicode_AsUTF8(msg) : "???"); Py_XDECREF(msg);
         assert(!DK_IS_SPLIT(dk) && (ix >= 0));
         assert(resolved_import == NULL);
 
@@ -1113,6 +1114,7 @@ start:
             Py_DECREF(startkey);
             if (resolved_import == NULL) {
                 *value_addr = NULL;
+                fprintf(stderr, "returning DKIX_VALUE_ERROR\n");
                 return DKIX_VALUE_ERROR;
             }
             // changed?

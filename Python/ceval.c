@@ -1839,7 +1839,7 @@ handle_eval_breaker:
         TARGET(STORE_FAST) {
             PREDICTED(STORE_FAST);
             PyObject *value = POP();
-            assert(!PyLazyImport_CheckExact(value));
+            // assert(!PyLazyImport_CheckExact(value));
             SETLOCAL(oparg, value);
             DISPATCH();
         }
@@ -2770,8 +2770,11 @@ handle_eval_breaker:
                 goto error;
             }
             if (PyDict_CheckExact(ns)) {
-                if (PyLazyImport_CheckExact(v))
+                if (PyLazyImport_CheckExact(v)) {
+                    // PyObject *d = _PyDict_GetItemKeepLazy(ns, name);
+                    // assert(!PyLazyImport_CheckExact(d));
                     _PyDict_SetHasLazyImports(ns);
+                }
                 err = PyDict_SetItem(ns, name, v);
             } else {
                 err = PyObject_SetItem(ns, name, v);
