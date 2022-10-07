@@ -230,6 +230,26 @@ typedef enum _PyCodeLocationInfoKind {
     PY_CODE_LOCATION_INFO_NONE = 15
 } _PyCodeLocationInfoKind;
 
+// Jaineel
+#define FOREACH_CODE_OBJECT_EVENT(V) \
+    V(CREATED)                \
+    V(DESTROY)                
+
+typedef enum {
+    #define DEF_EVENT(EVENT) PYCODEOBJECT_EVENT_##EVENT,
+    FOREACH_CODE_OBJECT_EVENT(DEF_EVENT)
+    #undef DEF_EVENT
+} PyCodeObject_Event;
+
+typedef void(*PyCodeObject_EventCallback)(
+  PyCodeObject_Event event,
+  PyCodeObject *func,
+  PyCodeObject *new_value);
+
+void PyCodeObject_SetEventCallback(PyCodeObject_EventCallback callback);
+PyCodeObject_EventCallback PyFunction_GetEventCallback(void);
+// Jaineel
+
 #ifdef __cplusplus
 }
 #endif

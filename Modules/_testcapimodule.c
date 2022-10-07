@@ -6578,6 +6578,11 @@ PyInit__testcapi(void)
     if (_PyTestCapi_Init_Unicode(m) < 0) {
         return NULL;
     }
+    // Jaineel
+    if(_PyTestCapi_Init_CodeObjectEvents(m) < 0){
+        return NULL;
+    }
+    // Jaineel
 
 #ifndef LIMITED_API_AVAILABLE
     PyModule_AddObjectRef(m, "LIMITED_API_AVAILABLE", Py_False);

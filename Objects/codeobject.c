@@ -11,6 +11,34 @@
 #include "pycore_tuple.h"         // _PyTuple_ITEMS()
 #include "clinic/codeobject.c.h"
 
+// Jaineel
+static void
+handle_code_object_event(PyCodeObject_Event event, PyCodeObject *code_obj, PyObject *new_value)
+{
+    PyThreadState *tstate = _PyThreadState_GET();
+    PyCodeObject_EventCallback handle_event = tstate->interp->code_object_event_callback;
+    if (handle_event == NULL) {
+        return;
+    }
+    handle_event(event, code_obj, new_value);
+}
+
+void
+PyFunction_SetEventCallback(PyCodeObject_EventCallback callback)
+{
+    PyThreadState *tstate = _PyThreadState_GET();
+    assert(tstate->interp->_initialized);
+    tstate->interp->code_object_event_callback = callback;
+}
+
+PyCodeObject_EventCallback
+PyCodeObject_GetEventCallback()
+{
+    PyThreadState *tstate = _PyThreadState_GET();
+    assert(tstate->interp->_initialized);
+    return tstate->interp->code_object_event_callback;
+}
+// Jaineel
 
 /******************
  * generic helpers
@@ -349,6 +377,9 @@ init_code(PyCodeObject *co, struct _PyCodeConstructor *con)
         entry_point++;
     }
     co->_co_firsttraceable = entry_point;
+    // Jaineel
+    handle_code_object_event(PYCODEOBJECT_EVENT_CREATED, co, NULL);
+    // Jaineel
 }
 
 static int
@@ -1582,6 +1613,10 @@ code_new_impl(PyTypeObject *type, int argcount, int posonlyargcount,
 static void
 code_dealloc(PyCodeObject *co)
 {
+    // Jaineel
+    handle_code_object_event(PYCODEOBJECT_EVENT_DESTROY, co, NULL);
+    // Jaineel
+    
     if (co->co_extra != NULL) {
         PyInterpreterState *interp = _PyInterpreterState_GET();
         _PyCodeObjectExtra *co_extra = co->co_extra;
@@ -1728,6 +1763,9 @@ code_richcompare(PyObject *self, PyObject *other, int op)
 
   done:
     Py_INCREF(res);
+    // Jaineel
+    handle_code_object_event(PYCODEOBJECT_EVENT_CREATED, co, NULL);
+    // Jaineel
     return res;
 }
 

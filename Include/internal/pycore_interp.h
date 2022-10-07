@@ -175,6 +175,10 @@ struct _is {
     struct types_state types;
     struct callable_cache callable_cache;
 
+    // Jaineel
+    PyCodeObject_EventCallback code_object_event_callback;
+    // Jaineel
+
     /* The following fields are here to avoid allocation during init.
        The data is exposed through PyInterpreterState pointer fields.
        These fields should not be accessed directly outside of init.

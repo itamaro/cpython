@@ -430,6 +430,9 @@ interpreter_clear(PyInterpreterState *interp, PyThreadState *tstate)
     Py_CLEAR(interp->after_forkers_parent);
     Py_CLEAR(interp->after_forkers_child);
 #endif
+    // Jaineel
+    interp->code_object_event_callback = NULL;
+    // Jaineel
 
     _PyAST_Fini(interp);
     _PyWarnings_Fini(interp);
