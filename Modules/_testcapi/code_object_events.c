@@ -18,13 +18,13 @@ static PyCodeObject *get_id(PyCodeObject *obj) {
         return NULL;
     }
     PyCodeObject *stack[] = {obj};
-    PyCodeObject *id = PyCodeObject_Vectorcall(id_func, stack, 1, NULL);
+    PyCodeObject *id = PyObject_Vectorcall(id_func, stack, 1, NULL);
     Py_DECREF(id_func);
     return id;
 }
 
 static void
-call_pyfunc_callback(PyFunction_Event event, PyFunctionObject *func, PyObject *new_value)
+call_pyfunc_callback(PyCodeObject_Event event, PyCodeObject *func, PyObject *new_value)
 {
     PyObject *event_obj = PyLong_FromLong(event);
     if (event_obj == NULL) {
@@ -35,7 +35,7 @@ call_pyfunc_callback(PyFunction_Event event, PyFunctionObject *func, PyObject *n
     }
     Py_INCREF(new_value);
     PyObject *func_or_id = NULL;
-    if (event == PYFUNC_EVENT_DESTROY) {
+    if (event == PYCODEOBJECT_EVENT_DESTROY) {
         /* Don't expose a function that's about to be destroyed to managed code */
         func_or_id = get_id((PyObject *) func);
         if (func_or_id == NULL) {
@@ -48,7 +48,7 @@ call_pyfunc_callback(PyFunction_Event event, PyFunctionObject *func, PyObject *n
         func_or_id = (PyObject *) func;
     }
     PyObject *stack[] = {event_obj, func_or_id, new_value};
-    PyObject *res = PyObject_Vectorcall(pyfunc_callback, stack, 3, NULL);
+    PyObject *res = PyObject_Vectorcall(pycodeobject_callback, stack, 3, NULL);
     Py_XDECREF(res);
     Py_DECREF(new_value);
     Py_DECREF(event_obj);
@@ -56,7 +56,7 @@ call_pyfunc_callback(PyFunction_Event event, PyFunctionObject *func, PyObject *n
 }
 
 static int
-add_event(PyObject *module, const char *name, PyFunction_Event event)
+add_event(PyObject *module, const char *name, PyCodeObject_Event event)
 {
     PyObject *value = PyLong_FromLong(event);
     if (value == NULL) {
@@ -74,47 +74,47 @@ set_func_event_callback(PyObject *self, PyObject *func)
         PyErr_SetString(PyExc_TypeError, "'func' must be a function");
         return NULL;
     }
-    if (pyfunc_callback != NULL) {
+    if (pycodeobject_callback != NULL) {
         PyErr_SetString(PyExc_RuntimeError, "already set callback");
         return NULL;
     }
     Py_INCREF(func);
-    pyfunc_callback = func;
-    orig_callback = PyFunction_GetEventCallback();
-    PyFunction_SetEventCallback(call_pyfunc_callback);
+    pycodeobject_callback = func;
+    orig_callback = PyCodeObject_GetEventCallback();
+    PyCodeObject_SetEventCallback(call_pyfunc_callback);
     Py_RETURN_NONE;
 }
 
 static PyObject *
-restore_func_event_callback(PyObject *self, PyObject *Py_UNUSED(ignored)) {
-    if (pyfunc_callback == NULL) {
+restore_code_object_event_callback(PyObject *self, PyObject *Py_UNUSED(ignored)) {
+    if (pycodeobject_callback == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "nothing to restore");
         return NULL;
     }
-    PyFunction_SetEventCallback(orig_callback);
+    PyCodeObject_SetEventCallback(orig_callback);
     orig_callback = NULL;
-    Py_CLEAR(pyfunc_callback);
+    Py_CLEAR(pycodeobject_callback);
     Py_RETURN_NONE;
 }
 
 static PyMethodDef TestMethods[] = {
-    {"set_func_event_callback", set_func_event_callback, METH_O},
-    {"restore_func_event_callback", restore_func_event_callback, METH_NOARGS},
+    {"set_code_object_event_callback", set_code_object_event_callback, METH_O},
+    {"restore_code_object_event_callback", restore_code_object_event_callback, METH_NOARGS},
     {NULL},
 };
 
 int
-_PyTestCapi_Init_FuncEvents(PyObject *m) {
-    if (PyModule_AddFunctions(m, TestMethods) < 0) {
+_PyTestCapi_Init_CodeObjectEvents(PyObject *m) {
+    if (PyModule_AddCodeObject(m, TestMethods) < 0) {
         return -1;
     }
 
     /* Expose each event as an attribute on the module */
 #define ADD_EVENT(event)  \
-    if (add_event(m, "PYFUNC_EVENT_" #event, PYFUNC_EVENT_##event)) { \
+    if (add_event(m, "PYCODEOBJECT_EVENT_" #event, PYCODEOBJECT_EVENT_##event)) { \
         return -1;                                    \
     }
-    FOREACH_FUNC_EVENT(ADD_EVENT);
+    FOREACH_CODE_OBJECT_EVENT(ADD_EVENT);
 #undef ADD_EVENT
 
     return 0;
