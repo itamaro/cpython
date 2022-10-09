@@ -104,7 +104,7 @@ static PyMethodDef TestMethods[] = {
 };
 
 int
-_PyTestCapi_Init_CodeObjectEvents(PyObject *m) {
+_PyTestCapi_Init_CodeObjectEvents(PyCodeObject *m) {
     if (PyModule_AddCodeObject(m, TestMethods) < 0) {
         return -1;
     }
