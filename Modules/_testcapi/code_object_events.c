@@ -109,7 +109,7 @@ _PyTestCapi_Init_CodeObjectEvents(PyCodeObject *m) {
         return -1;
     }
 
-    /* Expose each event as an attribute on the module */
+/* Expose each event as an attribute on the module */
 #define ADD_EVENT(event)  \
     if (add_event(m, "PYCODEOBJECT_EVENT_" #event, PYCODEOBJECT_EVENT_##event)) { \
         return -1;                                    \

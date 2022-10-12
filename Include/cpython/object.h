@@ -224,6 +224,10 @@ struct _typeobject {
 
     destructor tp_finalize;
     vectorcallfunc tp_vectorcall;
+
+    // Jaineel Shah
+    char cb_watched;
+    // Jaineel Shah
 };
 
 /* This struct is used by the specializer
@@ -510,3 +514,27 @@ Py_DEPRECATED(3.11) typedef int UsingDeprecatedTrashcanMacro;
 
 PyAPI_FUNC(int) _PyObject_VisitManagedDict(PyObject *obj, visitproc visit, void *arg);
 PyAPI_FUNC(void) _PyObject_ClearManagedDict(PyObject *obj);
+
+// Jaineel Shah
+// #define CODE_OBJECT_MAX_WATCHERS 8
+
+// ********** //
+// typedef enum {
+//   PYCODEOBJECT_CREATED,
+//   PYCODEOBJECT_DESTROYED
+// } PyCodeObject_Event
+
+// typedef void(*PyCodeObject_Callback)(
+//   PyCodeObject_Event event,
+//   PyCodeObject* code);
+
+// void PyCodeObject_SetCallback(PyCodeObject_Callback callback);
+// PyCodeObject_Callback PyCodeObject_GetCallback();
+// ********** //
+
+// typedef int(*PyCodeObject_WatchCallback)(PyCodeObject *);
+// PyAPI_FUNC(int) PyCodeObject_AddWatcher(PyCodeObject_WatchCallback callback);
+// PyAPI_FUNC(int) PyCodeObject_ClearWatcher(int watcher_id);
+// PyAPI_FUNC(int) PyCodeObject_Watch(int watcher_id, PyCodeObject *codeobject);
+// PyAPI_FUNC(int) PyCodeObject_Unwatch(int watcher_id, PyCodeObject *codeobject);
+// Jaineel Shah

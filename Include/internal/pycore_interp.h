@@ -158,6 +158,10 @@ struct _is {
 
     PyObject *audit_hooks;
 
+    // Jaineel Shah
+    // PyCodeObject_WatchCallback code_object_watchers[CODE_OBJECT_MAX_WATCHERS];
+    // Jaineel Shah
+
     struct _Py_unicode_state unicode;
     struct _Py_float_state float_state;
     /* Using a cache is very effective since typically only a single slice is

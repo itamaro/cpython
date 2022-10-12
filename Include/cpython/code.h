@@ -231,23 +231,36 @@ typedef enum _PyCodeLocationInfoKind {
 } _PyCodeLocationInfoKind;
 
 // Jaineel
-#define FOREACH_CODE_OBJECT_EVENT(V) \
-    V(CREATED)                \
-    V(DESTROY)                
+// #define FOREACH_CODE_OBJECT_EVENT(V) \
+//     V(CREATED)                \
+//     V(DESTROY)                
+
+// typedef enum {
+//     #define DEF_EVENT(EVENT) PYCODEOBJECT_EVENT_##EVENT,
+//     FOREACH_CODE_OBJECT_EVENT(DEF_EVENT)
+//     #undef DEF_EVENT
+// } PyCodeObject_Event;
+
+// typedef void(*PyCodeObject_EventCallback)(
+//   PyCodeObject_Event event,
+//   PyCodeObject *func,
+//   PyCodeObject *new_value);
+
+// void PyCodeObject_SetEventCallback(PyCodeObject_EventCallback callback);
+// PyCodeObject_EventCallback PyFunction_GetEventCallback(void);
 
 typedef enum {
-    #define DEF_EVENT(EVENT) PYCODEOBJECT_EVENT_##EVENT,
-    FOREACH_CODE_OBJECT_EVENT(DEF_EVENT)
-    #undef DEF_EVENT
+  PYCODEOBJECT_EVENT_CREATED,
+  PYCODEOBJECT_EVENT_DESTROY
 } PyCodeObject_Event;
 
 typedef void(*PyCodeObject_EventCallback)(
   PyCodeObject_Event event,
-  PyCodeObject *func,
-  PyCodeObject *new_value);
+  PyCodeObject* code);
 
 void PyCodeObject_SetEventCallback(PyCodeObject_EventCallback callback);
-PyCodeObject_EventCallback PyFunction_GetEventCallback(void);
+PyCodeObject_EventCallback PyCodeObject_GetEventCallback(void);
+
 // Jaineel
 
 #ifdef __cplusplus

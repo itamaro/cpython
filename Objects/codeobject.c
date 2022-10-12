@@ -11,16 +11,96 @@
 #include "pycore_tuple.h"         // _PyTuple_ITEMS()
 #include "clinic/codeobject.c.h"
 
+// Jaineel Shah
+// int
+// PyCodeObject_AddWatcher(PyCodeObject_WatchCallback callback)
+// {
+//     PyInterpreterState *interp = _PyInterpreterState_GET();
+
+//     for (int i = 0; i < CODE_OBJECT_MAX_WATCHERS; i++) {
+//         if (!interp->code_object_watchers[i]) {
+//             interp->code_object_watchers[i] = callback;
+//             return i;
+//         }
+//     }
+
+//     PyErr_SetString(PyExc_RuntimeError, "no more code object watcher IDs available");
+//     return -1;
+// }
+
+// static inline int
+// validate_watcher_id(PyInterpreterState *interp, int watcher_id)
+// {
+//     if (watcher_id < 0 || watcher_id >= CODE_OBJECT_MAX_WATCHERS) {
+//         PyErr_Format(PyExc_ValueError, "Invalid code object watcher ID %d", watcher_id);
+//         return -1;
+//     }
+//     if (!interp->code_object_watchers[watcher_id]) {
+//         PyErr_Format(PyExc_ValueError, "No code object watcher set for ID %d", watcher_id);
+//         return -1;
+//     }
+//     return 0;
+// }
+
+// int
+// PyCodeObject_ClearWatcher(int watcher_id)
+// {
+//     PyInterpreterState *interp = _PyInterpreterState_GET();
+//     if (validate_watcher_id(interp, watcher_id)) {
+//         return -1;
+//     }
+//     interp->code_object_watchers[watcher_id] = NULL;
+//     return 0;
+// }
+
+// static int assign_version_tag(PyCodeObject *code_object);
+
+// int
+// PyCodeObject_Watch(int watcher_id, PyCodeObject* obj)
+// {
+//     if (!PyCode_Check(obj)) {
+//         PyErr_SetString(PyExc_ValueError, "Cannot watch");
+//         return -1;
+//     }
+//     PyCodeObject *code_object = (PyCodeObject *)obj;
+//     PyInterpreterState *interp = _PyInterpreterState_GET();
+//     if (validate_watcher_id(interp, watcher_id)) {
+//         return -1;
+//     }
+//     // ensure we will get a callback on the next modification
+//     assign_version_tag(code_object);
+//     code_object->cb_watched |= (1 << watcher_id);
+//     return 0;
+// }
+
+// int
+// PyCodeObject_Unwatch(int watcher_id, PyCodeObject* obj)
+// {
+//     if (!PyCode_Check(obj)) {
+//         PyErr_SetString(PyExc_ValueError, "Cannot watch");
+//         return -1;
+//     }
+//     PyCodeObject *type = (PyCodeObject *)obj;
+//     PyInterpreterState *interp = _PyInterpreterState_GET();
+//     if (validate_watcher_id(interp, watcher_id)) {
+//         return -1;
+//     }
+//     code_object->cb_watched &= ~(1 << watcher_id);
+//     return 0;
+// }
+// Jaineel Shah
+
+
 // Jaineel
 static void
-handle_code_object_event(PyCodeObject_Event event, PyCodeObject *code_obj, PyObject *new_value)
+handle_code_object_event(PyCodeObject_Event event, PyCodeObject *code_obj)
 {
     PyThreadState *tstate = _PyThreadState_GET();
     PyCodeObject_EventCallback handle_event = tstate->interp->code_object_event_callback;
     if (handle_event == NULL) {
         return;
     }
-    handle_event(event, code_obj, new_value);
+    handle_event(event, code_obj);
 }
 
 void
@@ -378,7 +458,7 @@ init_code(PyCodeObject *co, struct _PyCodeConstructor *con)
     }
     co->_co_firsttraceable = entry_point;
     // Jaineel
-    handle_code_object_event(PYCODEOBJECT_EVENT_CREATED, co, NULL);
+    handle_code_object_event(PYCODEOBJECT_EVENT_CREATED, co);
     // Jaineel
 }
 
@@ -1614,9 +1694,9 @@ static void
 code_dealloc(PyCodeObject *co)
 {
     // Jaineel
-    handle_code_object_event(PYCODEOBJECT_EVENT_DESTROY, co, NULL);
+    handle_code_object_event(PYCODEOBJECT_EVENT_DESTROY, co);
     // Jaineel
-    
+
     if (co->co_extra != NULL) {
         PyInterpreterState *interp = _PyInterpreterState_GET();
         _PyCodeObjectExtra *co_extra = co->co_extra;
@@ -1764,7 +1844,7 @@ code_richcompare(PyObject *self, PyObject *other, int op)
   done:
     Py_INCREF(res);
     // Jaineel
-    handle_code_object_event(PYCODEOBJECT_EVENT_CREATED, co, NULL);
+    handle_code_object_event(PYCODEOBJECT_EVENT_CREATED, co);
     // Jaineel
     return res;
 }
