@@ -67,8 +67,8 @@ add_event(PyObject *module, const char *name, PyCodeObject_Event event)
     return ok;
 }
 
-static PyObject *
-set_func_event_callback(PyObject *self, PyObject *func)
+static PyCodeObject *
+set_code_object_event_callback(PyObject *self, PyObject *func)
 {
     if (!PyFunction_Check(func)) {
         PyErr_SetString(PyExc_TypeError, "'func' must be a function");
@@ -85,7 +85,7 @@ set_func_event_callback(PyObject *self, PyObject *func)
     Py_RETURN_NONE;
 }
 
-static PyObject *
+static PyCodeObject *
 restore_code_object_event_callback(PyObject *self, PyObject *Py_UNUSED(ignored)) {
     if (pycodeobject_callback == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "nothing to restore");
