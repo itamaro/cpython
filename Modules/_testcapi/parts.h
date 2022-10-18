@@ -28,9 +28,6 @@ int _PyTestCapi_Init_Vectorcall(PyObject *module);
 int _PyTestCapi_Init_Heaptype(PyObject *module);
 int _PyTestCapi_Init_Unicode(PyObject *module);
 
-// Jaineel
-int _PyTestCapi_Init_CodeObjectEvents(PyCodeObject *module);
-// Jaineel
 
 #ifdef LIMITED_API_AVAILABLE
 int _PyTestCapi_Init_VectorcallLimited(PyObject *module);
