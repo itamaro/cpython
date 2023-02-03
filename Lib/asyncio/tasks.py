@@ -824,6 +824,7 @@ def gather(*coros_or_futures, return_exceptions=False):
     nfinished = 0
     loop = None
     outer = None  # bpo-46672
+    all_completed = True
     for arg in coros_or_futures:
         if arg not in arg_to_fut:
             fut = _ensure_future(arg, loop=loop)
@@ -838,13 +839,21 @@ def gather(*coros_or_futures, return_exceptions=False):
 
             nfuts += 1
             arg_to_fut[arg] = fut
-            fut.add_done_callback(_done_callback)
+            if not fut.done():
+                all_completed = False
+                fut.add_done_callback(_done_callback)
 
         else:
             # There's a duplicate Future object in coros_or_futures.
             fut = arg_to_fut[arg]
 
         children.append(fut)
+
+    if all_completed:
+        # skip creating gathering future if all futures are complete
+        completed_future = futures.Future()
+        completed_future.set_result(c.result() for c in children)
+        return completed_future
 
     outer = _GatheringFuture(children, loop=loop)
     return outer
