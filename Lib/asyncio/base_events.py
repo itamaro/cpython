@@ -614,7 +614,10 @@ class BaseEventLoop(events.AbstractEventLoop):
                                    finalizer=self._asyncgen_finalizer_hook)
 
             events._set_running_loop(self)
+            i = 0
             while True:
+                i += 1
+                print("run forever", i)
                 self._run_once()
                 if self._stopping:
                     break
@@ -1933,7 +1936,9 @@ class BaseEventLoop(events.AbstractEventLoop):
         # Use an idiom that is thread-safe without using locks.
         ntodo = len(self._ready)
         for i in range(ntodo):
+            print(i, ntodo, len(self._ready), [id(h) for h in self._ready])
             handle = self._ready.popleft()
+            print(handle, id(handle))
             if handle._cancelled:
                 continue
             if self._debug:
@@ -1948,6 +1953,7 @@ class BaseEventLoop(events.AbstractEventLoop):
                 finally:
                     self._current_handle = None
             else:
+                print("run", handle)
                 handle._run()
         handle = None  # Needed to break cycles when an exception occurs.
 

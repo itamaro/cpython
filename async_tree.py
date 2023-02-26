@@ -22,8 +22,8 @@ import time
 from argparse import ArgumentParser
 
 
-NUM_RECURSE_LEVELS = 6
-NUM_RECURSE_BRANCHES = 6
+NUM_RECURSE_LEVELS = 4
+NUM_RECURSE_BRANCHES = 3
 IO_SLEEP_TIME = 0.05
 DEFAULT_MEMOIZABLE_PERCENTAGE = 90
 DEFAULT_CPU_PROBABILITY = 0.5
@@ -128,6 +128,7 @@ class AsyncTree:
         )
 
     async def recurse(self, recurse_level):
+        print("AAA", recurse_level)
         if recurse_level == 0:
             await self.suspense_func()
             return
@@ -139,10 +140,13 @@ class AsyncTree:
         else:
             async with asyncio.TaskGroup() as tg:
                 for _ in range(NUM_RECURSE_BRANCHES):
-                    tg.create_task(self.recurse(recurse_level - 1))
+                    t = tg.create_task(self.recurse(recurse_level - 1))
+                    print(f"at recurse {recurse_level} -- created {t}")
 
     async def run_benchmark(self):
+        print("HERE")
         await self.recurse(NUM_RECURSE_LEVELS)
+        print("THERE")
 
     def run(self):
 
@@ -160,6 +164,8 @@ class AsyncTree:
             if coro_result is _NOT_SET:
                 return counting_task_constructor(coro, loop=loop, name=name, context=context)
             return counting_task_constructor(coro, loop=loop, name=name, context=context, coro_result=coro_result)
+
+        # import os; print(os.getpid()); import pdb; pdb.set_trace()
 
         asyncio.run(
             self.run_benchmark(),
@@ -205,6 +211,9 @@ class CpuIoMixedAsyncTree(MemoizationAsyncTree):
 
 
 if __name__ == "__main__":
+    import gc
+    gc.disable()
+
     args = parse_args()
     scenario = args.scenario
 
