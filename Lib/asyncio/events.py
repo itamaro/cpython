@@ -734,6 +734,38 @@ class _RunningLoop(threading.local):
 _running_loop = _RunningLoop()
 
 
+# throwing things here temporarily to defer premature dir layout bikeshedding
+
+def create_eager_task_factory(custom_task_constructor):
+
+    def factory(loop, coro, *, name=None, context=None):
+        loop._check_closed()
+        if not loop.is_running():
+            return custom_task_constructor(coro, loop=loop, name=name, context=context)
+
+        try:
+            result = coro.send(None)
+        except StopIteration as si:
+            fut = loop.create_future()
+            fut.set_result(si.value)
+            return fut
+        except Exception as ex:
+            fut = loop.create_future()
+            fut.set_exception(ex)
+            return fut
+        else:
+            task = custom_task_constructor(
+                coro, loop=loop, name=name, context=context, coro_result=result)
+            if task._source_traceback:
+                del task._source_traceback[-1]
+            return task
+
+    return factory
+
+# eager_task_factory = create_eager_task_factory(tasks.Task)
+
+
+
 def get_running_loop():
     """Return the running event loop.  Raise a RuntimeError if there is none.
 
@@ -816,7 +848,10 @@ def set_event_loop(loop):
 
 def new_event_loop():
     """Equivalent to calling get_event_loop_policy().new_event_loop()."""
-    return get_event_loop_policy().new_event_loop()
+    from asyncio import Task
+    loop = get_event_loop_policy().new_event_loop()
+    loop.set_task_factory(create_eager_task_factory(Task))
+    return loop
 
 
 def get_child_watcher():

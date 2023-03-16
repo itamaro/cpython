@@ -163,10 +163,10 @@ class AsyncTree:
 
         asyncio.run(
             self.run_benchmark(),
-            task_factory=(
-                asyncio.create_eager_task_factory(counting_task_constructor)
-                if self.use_eager_factory else counting_task_factory
-            ),
+            # task_factory=(
+            #     asyncio.create_eager_task_factory(counting_task_constructor)
+            #     if self.use_eager_factory else counting_task_factory
+            # ),
         )
 
 

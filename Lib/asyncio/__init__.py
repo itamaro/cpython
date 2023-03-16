@@ -41,36 +41,6 @@ __all__ = (base_events.__all__ +
             'eager_task_factory',
            ))
 
-# throwing things here temporarily to defer premature dir layout bikeshedding
-
-def create_eager_task_factory(custom_task_constructor):
-
-    def factory(loop, coro, *, name=None, context=None):
-        loop._check_closed()
-        if not loop.is_running():
-            return custom_task_constructor(coro, loop=loop, name=name, context=context)
-
-        try:
-            result = coro.send(None)
-        except StopIteration as si:
-            fut = loop.create_future()
-            fut.set_result(si.value)
-            return fut
-        except Exception as ex:
-            fut = loop.create_future()
-            fut.set_exception(ex)
-            return fut
-        else:
-            task = custom_task_constructor(
-                coro, loop=loop, name=name, context=context, coro_result=result)
-            if task._source_traceback:
-                del task._source_traceback[-1]
-            return task
-
-    return factory
-
-eager_task_factory = create_eager_task_factory(Task)
-
 if sys.platform == 'win32':  # pragma: no cover
     from .windows_events import *
     __all__ += windows_events.__all__
