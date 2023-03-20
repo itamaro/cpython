@@ -870,6 +870,9 @@ _PyUnicode_InitStaticStrings(void) {
     string = &_Py_ID(coro);
     assert(_PyUnicode_CheckConsistency(string, 1));
     PyUnicode_InternInPlace(&string);
+    string = &_Py_ID(coro_result);
+    assert(_PyUnicode_CheckConsistency(string, 1));
+    PyUnicode_InternInPlace(&string);
     string = &_Py_ID(count);
     assert(_PyUnicode_CheckConsistency(string, 1));
     PyUnicode_InternInPlace(&string);
