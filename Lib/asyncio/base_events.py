@@ -407,6 +407,7 @@ class BaseEventLoop(events.AbstractEventLoop):
         self._task_factory = None
         self._coroutine_origin_tracking_enabled = False
         self._coroutine_origin_tracking_saved_depth = None
+        self._eagerly_executing_coro = False
 
         # A weak set of all asynchronous generators that are
         # being iterated by the loop.

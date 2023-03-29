@@ -915,6 +915,7 @@ def create_eager_task_factory(custom_task_constructor):
             return custom_task_constructor(coro, loop=loop, name=name, context=context)
 
         try:
+            loop._eagerly_executing_coro = True
             result = coro.send(None)
         except StopIteration as si:
             fut = loop.create_future()
@@ -930,6 +931,8 @@ def create_eager_task_factory(custom_task_constructor):
             if task._source_traceback:
                 del task._source_traceback[-1]
             return task
+        finally:
+            loop._eagerly_executing_coro = False
 
     return factory
 

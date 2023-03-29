@@ -3343,6 +3343,16 @@ _asyncio_current_task_impl(PyObject *module, PyObject *loop)
         Py_INCREF(loop);
     }
 
+    bool eagerly_exec = false;
+    PyObject * eagerly_exec_obj = PyObject_GetAttrString(loop, "_eagerly_executing_coro");
+    if (eagerly_exec_obj != NULL && PyBool_Check(eagerly_exec_obj)) {
+        eagerly_exec = (eagerly_exec_obj == Py_True);
+    }
+    Py_XDECREF(eagerly_exec_obj);
+    if (eagerly_exec_obj) {
+        printf("yielding?\n");
+    }
+
     ret = PyDict_GetItemWithError(state->current_tasks, loop);
     Py_DECREF(loop);
     if (ret == NULL && PyErr_Occurred()) {
