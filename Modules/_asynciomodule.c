@@ -1940,6 +1940,7 @@ static  PyMethodDef TaskWakeupDef = {
 static int
 register_task(asyncio_state *state, PyObject *task)
 {
+    printf("hello from register_task\n");
     PyObject *res = PyObject_CallMethodOneArg(state->all_tasks,
                                                  &_Py_ID(add), task);
     if (res == NULL) {
@@ -1953,6 +1954,7 @@ register_task(asyncio_state *state, PyObject *task)
 static int
 unregister_task(asyncio_state *state, PyObject *task)
 {
+    printf("hello from unregister_task\n");
     PyObject *res = PyObject_CallMethodOneArg(state->all_tasks,
                                      &_Py_ID(discard), task);
     if (res == NULL) {
@@ -2084,7 +2086,7 @@ _asyncio_Task___init___impl(TaskObj *self, PyObject *coro, PyObject *loop,
     if (task_call_step_soon(state, self, NULL)) {
         return -1;
     }
-    return register_task(state, (PyObject*)self);
+    return 0; // register_task(state, (PyObject*)self);
 }
 
 static int
