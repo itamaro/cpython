@@ -17,7 +17,6 @@ import inspect
 import itertools
 import types
 import warnings
-import weakref
 from types import GenericAlias
 
 from . import base_tasks
@@ -368,6 +367,9 @@ class Task(futures._PyFuture):  # Inherit Python Task implementation
                 self._loop.call_soon(
                     self.__step, new_exc, context=self._context)
         finally:
+            _leave_task(self._loop, self)
+            if self.done():
+                _unregister_task(self)
             self = None  # Needed to break cycles when an exception occurs.
 
     def __wakeup(self, future):
@@ -932,14 +934,9 @@ def run_coroutine_threadsafe(coro, loop):
 
 def create_eager_task_factory(custom_task_constructor):
 
-    if "eager_start" not in inspect.signature(custom_task_constructor).parameters:
-        raise TypeError(
-            "Provided constructor does not support eager task execution")
-
     def factory(loop, coro, *, name=None, context=None):
         return custom_task_constructor(
             coro, loop=loop, name=name, context=context, eager_start=True)
-
 
     return factory
 
@@ -949,7 +946,7 @@ eager_task_factory = create_eager_task_factory(Task)
 # Collectively these two sets hold references to the complete set of active
 # tasks. Eagerly executed tasks use a faster regular set as an optimization
 # but may graduate to a WeakSet if the task blocks on IO.
-_scheduled_tasks = weakref.WeakSet()
+_scheduled_tasks = set()
 _eager_tasks = set()
 
 # Dictionary containing tasks that are currently active in

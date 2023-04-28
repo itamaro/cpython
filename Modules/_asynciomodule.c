@@ -1946,13 +1946,7 @@ static  PyMethodDef TaskWakeupDef = {
 static int
 register_task(asyncio_state *state, PyObject *task)
 {
-    PyObject *res = PyObject_CallMethodOneArg(state->scheduled_tasks,
-                                                 &_Py_ID(add), task);
-    if (res == NULL) {
-        return -1;
-    }
-    Py_DECREF(res);
-    return 0;
+    return PySet_Add(state->scheduled_tasks, task);
 }
 
 static int
@@ -1964,13 +1958,7 @@ register_eager_task(asyncio_state *state, PyObject *task)
 static int
 unregister_task(asyncio_state *state, PyObject *task)
 {
-    PyObject *res = PyObject_CallMethodOneArg(state->scheduled_tasks,
-                                     &_Py_ID(discard), task);
-    if (res == NULL) {
-        return -1;
-    }
-    Py_DECREF(res);
-    return 0;
+    return PySet_Discard(state->scheduled_tasks, task);
 }
 
 static int
@@ -3139,19 +3127,22 @@ task_step(asyncio_state *state, TaskObj *task, PyObject *exc)
 
     if (res == NULL) {
         PyObject *exc = PyErr_GetRaisedException();
-        leave_task(state, task->task_loop, (PyObject*)task);
-        _PyErr_ChainExceptions1(exc);
-        return NULL;
-    }
-    else {
-        if (leave_task(state, task->task_loop, (PyObject*)task) < 0) {
-            Py_DECREF(res);
-            return NULL;
-        }
-        else {
-            return res;
+        if (exc) {
+            _PyErr_ChainExceptions1(exc);
         }
     }
+
+    if (leave_task(state, task->task_loop, (PyObject*)task) < 0) {
+        Py_CLEAR(res);
+    }
+
+    if (task->task_state != STATE_PENDING) {
+        if (unregister_task(state, (PyObject *)task) < 0) {
+            Py_CLEAR(res);
+        }
+    }
+
+    return res;
 }
 
 static int
@@ -3709,11 +3700,7 @@ module_init(asyncio_state *state)
     WITH_MOD("traceback")
     GET_MOD_ATTR(state->traceback_extract_stack, "extract_stack")
 
-    PyObject *weak_set;
-    WITH_MOD("weakref")
-    GET_MOD_ATTR(weak_set, "WeakSet");
-    state->scheduled_tasks = PyObject_CallNoArgs(weak_set);
-    Py_CLEAR(weak_set);
+    state->scheduled_tasks = PySet_New(NULL);
     if (state->scheduled_tasks == NULL) {
         goto fail;
     }
