@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CONFIG_CACHE_HASH_FILES: configure,configure.ac,.github/workflows/build.yml
+  CONFIG_CACHE_HASH_FILES: .github/workflows/build.yml
 
 jobs:
   check_source:
