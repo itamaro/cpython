@@ -32,6 +32,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  CONFIG_CACHE_HASH_FILES: configure,configure.ac,.github/workflows/build.yml
+
 jobs:
   check_source:
     name: 'Check for source changes'
@@ -88,7 +91,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: config.cache
-          key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles('configure', 'configure.ac', '.github/workflows/build.yml') }}
+          key: ${{ github.job }}-${{ runner.os }}-${{ hashFiles(format('{0}', env.CONFIG_CACHE_HASH_FILES)) }}
       - uses: actions/setup-python@v3
       - name: Install Dependencies
         run: sudo ./.github/workflows/posix-deps-apt.sh
