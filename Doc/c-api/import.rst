@@ -347,7 +347,7 @@ Importing Modules
 
    On success, create and return a module object.
    This module will not be initialized; call :c:func:`PyModule_Exec`
-   to initialize the it.
+   to initialize it.
    (Custom importers should do this in their
    :py:meth:`~importlib.abc.Loader.exec_module` method.)
 
