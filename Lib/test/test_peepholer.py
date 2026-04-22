@@ -211,6 +211,15 @@ class TestTranforms(BytecodeTestCase):
                 self.assertNotInBytecode(code, 'BUILD_LIST')
                 self.check_lnotab(code)
 
+    def test_constant_folding_large_lists_of_constants(self):
+        # Lists with >30 elements should still be folded (gh-126835)
+        elts = ', '.join(str(i) for i in range(50))
+        code = compile(f'a in [{elts}]', '', 'single')
+        self.assertInBytecode(code, 'LOAD_CONST', tuple(range(50)))
+        self.assertNotInBytecode(code, 'BUILD_LIST')
+        self.assertNotInBytecode(code, 'LIST_APPEND')
+        self.check_lnotab(code)
+
     def test_constant_folding_sets_of_constants(self):
         for line, elem in (
             # in/not in constants with BUILD_SET should be folded to a frozenset:
@@ -240,6 +249,25 @@ class TestTranforms(BytecodeTestCase):
         self.assertTrue(not g(3))
         self.assertTrue(g(4))
         self.check_lnotab(g)
+
+    def test_constant_folding_large_sets_of_constants(self):
+        # Sets with >30 elements should still be folded (gh-126835)
+        elts = ', '.join(str(i) for i in range(50))
+        code = compile(f'a in {{{elts}}}', '', 'single')
+        self.assertInBytecode(code, 'LOAD_CONST', frozenset(range(50)))
+        self.assertNotInBytecode(code, 'BUILD_SET')
+        self.assertNotInBytecode(code, 'SET_ADD')
+        self.check_lnotab(code)
+
+        # Ensure that the resulting code actually works:
+        def f(a):
+            return a in {0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                         10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                         20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+                         30, 31, 32, 33, 34, 35, 36, 37, 38, 39}
+
+        self.assertTrue(f(25))
+        self.assertTrue(not f(40))
 
     def test_constant_folding_small_int(self):
         tests = [
@@ -1383,6 +1411,146 @@ class DirectCfgOptimizerTests(CfgOptimizationTestCase):
             ('RETURN_VALUE', None, 0)
         ]
         self.cfg_optimization_test(before, after, consts=[], expected_consts=[(1, 2, 3)])
+
+    def test_fold_const_set_add(self):
+        # large set + CONTAINS_OP → frozenset constant
+        n = 50
+        load_and_add = [t for i in range(n)
+                        for t in [('LOAD_SMALL_INT', i, 0), ('SET_ADD', 1, 0)]]
+        before = (
+            [('LOAD_NAME', 0, 0),
+             ('BUILD_SET', 0, 0)] +
+            load_and_add +
+            [('CONTAINS_OP', 0, 0),
+             ('POP_TOP', None, 0),
+             ('LOAD_CONST', 0, 0),
+             ('RETURN_VALUE', None, 0)]
+        )
+        after = [
+            ('LOAD_NAME', 0, 0),
+            ('LOAD_CONST', 1, 0),
+            ('CONTAINS_OP', 0, 0),
+            ('POP_TOP', None, 0),
+            ('LOAD_CONST', 0, 0),
+            ('RETURN_VALUE', None, 0),
+        ]
+        self.cfg_optimization_test(
+            before, after, consts=[None],
+            expected_consts=[None, frozenset(range(n))])
+
+        # large set + GET_ITER → frozenset constant
+        before = (
+            [('BUILD_SET', 0, 0)] +
+            load_and_add +
+            [('GET_ITER', 0, 0),
+             ('LOAD_CONST', 0, 0),
+             ('RETURN_VALUE', None, 0)]
+        )
+        after = [
+            ('LOAD_CONST', 1, 0),
+            ('GET_ITER', 0, 0),
+            ('LOAD_CONST', 0, 0),
+            ('RETURN_VALUE', None, 0),
+        ]
+        self.cfg_optimization_test(
+            before, after, consts=[None],
+            expected_consts=[None, frozenset(range(n))])
+
+        # non-constant element → no folding
+        same = (
+            [('LOAD_NAME', 1, 0),
+             ('BUILD_SET', 0, 0)] +
+            [('LOAD_SMALL_INT', 1, 0), ('SET_ADD', 1, 0),
+             ('LOAD_NAME', 0, 0), ('SET_ADD', 1, 0)] +
+            [('CONTAINS_OP', 0, 0),
+             ('POP_TOP', None, 0),
+             ('LOAD_CONST', 0, 0),
+             ('RETURN_VALUE', None, 0)]
+        )
+        self.cfg_optimization_test(same, same, consts=[None])
+
+        # NOP tolerance
+        before = (
+            [('LOAD_NAME', 0, 0),
+             ('BUILD_SET', 0, 0),
+             ('NOP', None, 0),
+             ('LOAD_SMALL_INT', 1, 0),
+             ('NOP', None, 0),
+             ('SET_ADD', 1, 0),
+             ('NOP', None, 0),
+             ('LOAD_SMALL_INT', 2, 0),
+             ('SET_ADD', 1, 0),
+             ('LOAD_SMALL_INT', 3, 0),
+             ('NOP', None, 0),
+             ('SET_ADD', 1, 0),
+             ('CONTAINS_OP', 0, 0),
+             ('POP_TOP', None, 0),
+             ('LOAD_CONST', 0, 0),
+             ('RETURN_VALUE', None, 0)]
+        )
+        after = [
+            ('LOAD_NAME', 0, 0),
+            ('LOAD_CONST', 1, 0),
+            ('CONTAINS_OP', 0, 0),
+            ('POP_TOP', None, 0),
+            ('LOAD_CONST', 0, 0),
+            ('RETURN_VALUE', None, 0),
+        ]
+        self.cfg_optimization_test(
+            before, after, consts=[None],
+            expected_consts=[None, frozenset({1, 2, 3})])
+
+    def test_fold_const_list_append(self):
+        # large list + CONTAINS_OP → tuple constant
+        n = 50
+        load_and_add = [t for i in range(n)
+                        for t in [('LOAD_SMALL_INT', i, 0), ('LIST_APPEND', 1, 0)]]
+        before = (
+            [('LOAD_NAME', 0, 0),
+             ('BUILD_LIST', 0, 0)] +
+            load_and_add +
+            [('CONTAINS_OP', 0, 0),
+             ('POP_TOP', None, 0),
+             ('LOAD_CONST', 0, 0),
+             ('RETURN_VALUE', None, 0)]
+        )
+        after = [
+            ('LOAD_NAME', 0, 0),
+            ('LOAD_CONST', 1, 0),
+            ('CONTAINS_OP', 0, 0),
+            ('POP_TOP', None, 0),
+            ('LOAD_CONST', 0, 0),
+            ('RETURN_VALUE', None, 0),
+        ]
+        self.cfg_optimization_test(
+            before, after, consts=[None],
+            expected_consts=[None, tuple(range(n))])
+
+        # large list + GET_ITER → tuple constant
+        before = (
+            [('BUILD_LIST', 0, 0)] +
+            load_and_add +
+            [('GET_ITER', 0, 0),
+             ('LOAD_CONST', 0, 0),
+             ('RETURN_VALUE', None, 0)]
+        )
+        after = [
+            ('LOAD_CONST', 1, 0),
+            ('GET_ITER', 0, 0),
+            ('LOAD_CONST', 0, 0),
+            ('RETURN_VALUE', None, 0),
+        ]
+        self.cfg_optimization_test(
+            before, after, consts=[None],
+            expected_consts=[None, tuple(range(n))])
+
+        # not followed by CONTAINS_OP or GET_ITER → no folding
+        same = (
+            [('BUILD_LIST', 0, 0)] +
+            [('LOAD_SMALL_INT', 1, 0), ('LIST_APPEND', 1, 0)] * 3 +
+            [('RETURN_VALUE', None, 0)]
+        )
+        self.cfg_optimization_test(same, same, consts=[])
 
     def test_optimize_if_const_list(self):
         before = [
