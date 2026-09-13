@@ -273,12 +273,41 @@ class EmbeddingTests(EmbeddingTestsMixin, unittest.TestCase):
         out, err = self.run_embedded_interpreter("test_create_module_from_initfunc")
         self.assertEqual(self._nogil_filtered_err(err, "embedded_ext"), "")
         self.assertEqual(out,
-                         "<module 'my_test_extension' (static-extension)>\n"
-                         "my_test_extension.executed='yes'\n"
-                         "my_test_extension.exec_slot_ran='yes'\n"
-                         "<module 'embedded_ext' (static-extension)>\n"
-                         "embedded_ext.executed='yes'\n"
-                         )
+            # multi-phase init: not in sys.modules until importlib adds it
+            "created 'my_test_extension': in sys.modules=False\n"
+            "<module 'my_test_extension' (static-extension)>\n"
+            "my_test_extension.executed='yes'\n"
+            "my_test_extension.exec_slot_ran='yes'\n"
+            # single-phase init: added to sys.modules by the init function
+            "created 'embedded_ext': in sys.modules=True\n"
+            "<module 'embedded_ext' (static-extension)>\n"
+            "embedded_ext.executed='yes'\n"
+            # single-phase submodule created with only its short name
+            # gets the full name from the spec (package context)
+            "created 'sp_pkg': in sys.modules=False\n"
+            "created 'sp_pkg.sp_submod': in sys.modules=True\n"
+            "<module 'sp_pkg.sp_submod' (static-extension)>\n"
+            "sp_pkg.sp_submod.__name__='sp_pkg.sp_submod'\n"
+            "sys.modules[\"sp_pkg.sp_submod\"] is sp_pkg.sp_submod=True\n"
+            "\"sp_submod\" in sys.modules=False\n"
+            # non-ASCII names: multi-phase init works, single-phase doesn't
+            "created 'm\\xf6dul_mp': in sys.modules=False\n"
+            "ascii(mp.__name__)=\"'m\\\\xf6dul_mp'\" mp.executed='yes'\n"
+            "SystemError: 'initialization of m\\xf6dul_sp "
+            "did not return PyModuleDef'\n"
+            # same name, different initfuncs: the cached module is
+            # returned and the second initfunc is never called
+            "a.which='A' b.which='A' csm.initfunc_calls()=(1, 0)\n"
+            # names registered in the inittab are refused
+            "ImportError: cannot create module 'sys' from an init function: "
+            "a built-in module with this name is registered "
+            "in PyImport_Inittab\n"
+            "ImportError: cannot create module 'create_static_module' "
+            "from an init function: a built-in module with this name "
+            "is registered in PyImport_Inittab\n"
+            "sys.modules[\"create_static_module\"] is csm=True\n"
+            "csm.initfunc_calls()=(1, 0)\n"
+        )
 
     def test_inittab_submodule_multiphase(self):
         out, err = self.run_embedded_interpreter("test_inittab_submodule_multiphase")

@@ -2410,24 +2410,165 @@ static int test_repeated_init_and_inittab(void)
     return 0;
 }
 
+/// Helpers for test_create_module_from_initfunc ///
+
+// A single-phase init submodule that only knows its short name,
+// like pybind11's PYBIND11_MODULE(sp_submod, m) would.
+static PyModuleDef cmfi_sp_submod_def = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "sp_submod",
+    .m_size = -1,
+};
+
 static PyObject*
-create_module(PyObject* self, PyObject* spec)
+cmfi_PyInit_sp_submod(void)
 {
+    return PyModule_Create(&cmfi_sp_submod_def);
+}
+
+// A multi-phase init package for the submodule above.
+static PyModuleDef_Slot cmfi_sp_pkg_slots[] = {
+    {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+    {0, NULL},
+};
+
+static PyModuleDef cmfi_sp_pkg_def = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "sp_pkg",
+    .m_size = 0,
+    .m_slots = cmfi_sp_pkg_slots,
+};
+
+static PyObject*
+cmfi_PyInit_sp_pkg(void)
+{
+    return PyModuleDef_Init(&cmfi_sp_pkg_def);
+}
+
+// Two different single-phase init functions for the same module name.
+static int initfunc_a_calls = 0;
+static int initfunc_b_calls = 0;
+
+static PyModuleDef same_name_a_def = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "same_name",
+    .m_size = -1,
+};
+
+static PyModuleDef same_name_b_def = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "same_name",
+    .m_size = -1,
+};
+
+static PyObject*
+PyInit_same_name_a(void)
+{
+    initfunc_a_calls++;
+    PyObject *mod = PyModule_Create(&same_name_a_def);
+    if (mod == NULL || PyModule_AddStringConstant(mod, "which", "A") < 0) {
+        Py_XDECREF(mod);
+        return NULL;
+    }
+    return mod;
+}
+
+static PyObject*
+PyInit_same_name_b(void)
+{
+    initfunc_b_calls++;
+    PyObject *mod = PyModule_Create(&same_name_b_def);
+    if (mod == NULL || PyModule_AddStringConstant(mod, "which", "B") < 0) {
+        Py_XDECREF(mod);
+        return NULL;
+    }
+    return mod;
+}
+
+// Modules with non-ASCII names: multi-phase init is supported,
+// single-phase init is not.
+static PyModuleDef_Slot nonascii_mp_slots[] = {
+    {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+    {0, NULL},
+};
+
+static PyModuleDef nonascii_mp_def = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "nonascii_mp",
+    .m_size = 0,
+    .m_slots = nonascii_mp_slots,
+};
+
+static PyObject*
+PyInit_nonascii_mp(void)
+{
+    return PyModuleDef_Init(&nonascii_mp_def);
+}
+
+static PyModuleDef nonascii_sp_def = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "nonascii_sp",
+    .m_size = -1,
+};
+
+static PyObject*
+PyInit_nonascii_sp(void)
+{
+    return PyModule_Create(&nonascii_sp_def);
+}
+
+// "m\xf6dul_mp" and "m\xf6dul_sp" as UTF-8
+#define NONASCII_MP_NAME "m\xc3\xb6" "dul_mp"
+#define NONASCII_SP_NAME "m\xc3\xb6" "dul_sp"
+
+static PyObject*
+create_module(PyObject* self, PyObject* args)
+{
+    PyObject *spec;
+    int variant = 0;
+    if (!PyArg_ParseTuple(args, "O|i:create_module", &spec, &variant)) {
+        return NULL;
+    }
     PyObject *name = PyObject_GetAttrString(spec, "name");
     if (!name) {
         return NULL;
     }
+    PyObject* (*initfunc)(void) = NULL;
     if (PyUnicode_EqualToUTF8(name, "my_test_extension")) {
-        Py_DECREF(name);
-        return PyImport_CreateModuleFromInitfunc(spec, init_my_test_extension);
+        initfunc = init_my_test_extension;
     }
-    if (PyUnicode_EqualToUTF8(name, "embedded_ext")) {
-        Py_DECREF(name);
-        return PyImport_CreateModuleFromInitfunc(spec, PyInit_embedded_ext);
+    else if (PyUnicode_EqualToUTF8(name, "embedded_ext")) {
+        initfunc = PyInit_embedded_ext;
     }
-    PyErr_Format(PyExc_LookupError, "static module %R not found", name);
+    else if (PyUnicode_EqualToUTF8(name, "sp_pkg")) {
+        initfunc = cmfi_PyInit_sp_pkg;
+    }
+    else if (PyUnicode_EqualToUTF8(name, "sp_pkg.sp_submod")) {
+        initfunc = cmfi_PyInit_sp_submod;
+    }
+    else if (PyUnicode_EqualToUTF8(name, "same_name")) {
+        initfunc = variant == 0 ? PyInit_same_name_a : PyInit_same_name_b;
+    }
+    else if (PyUnicode_EqualToUTF8(name, NONASCII_MP_NAME)) {
+        initfunc = PyInit_nonascii_mp;
+    }
+    else if (PyUnicode_EqualToUTF8(name, NONASCII_SP_NAME)) {
+        initfunc = PyInit_nonascii_sp;
+    }
+    else if (PyUnicode_EqualToUTF8(name, "sys")
+             || PyUnicode_EqualToUTF8(name, "create_static_module")) {
+        // names registered in the inittab (core module / builtin)
+        initfunc = PyInit_same_name_a;
+    }
+    if (initfunc == NULL) {
+        PyErr_Format(PyExc_LookupError, "static module %R not found", name);
+        Py_DECREF(name);
+        return NULL;
+    }
     Py_DECREF(name);
-    return NULL;
+    return PyImport_CreateModuleFromInitfunc(spec, initfunc);
 }
 
 static PyObject*
@@ -2439,9 +2580,16 @@ exec_module(PyObject* self, PyObject* mod)
     Py_RETURN_NONE;
 }
 
+static PyObject*
+initfunc_calls(PyObject* self, PyObject* Py_UNUSED(args))
+{
+    return Py_BuildValue("(ii)", initfunc_a_calls, initfunc_b_calls);
+}
+
 static PyMethodDef create_static_module_methods[] = {
-    {"create_module", create_module, METH_O, NULL},
+    {"create_module", create_module, METH_VARARGS, NULL},
     {"exec_module", exec_module, METH_O, NULL},
+    {"initfunc_calls", initfunc_calls, METH_NOARGS, NULL},
     {NULL}
 };
 
@@ -2463,15 +2611,7 @@ test_create_module_from_initfunc(void)
     wchar_t* argv[] = {
         PROGRAM_NAME,
         L"-c",
-        // Multi-phase initialization
-        L"import my_test_extension;"
-        L"print(my_test_extension);"
-        L"print(f'{my_test_extension.executed=}');"
-        L"print(f'{my_test_extension.exec_slot_ran=}');"
-        // Single-phase initialization
-        L"import embedded_ext;"
-        L"print(embedded_ext);"
-        L"print(f'{embedded_ext.executed=}');"
+        L"run_tests()",
     };
     PyConfig config;
     if (PyImport_AppendInittab("create_static_module",
@@ -2485,23 +2625,72 @@ test_create_module_from_initfunc(void)
     init_from_config_clear(&config);
     int result = PyRun_SimpleString(
         "import sys\n"
+        "import importlib\n"
         "from importlib.util import spec_from_loader\n"
-        "import create_static_module\n"
+        "import create_static_module as csm\n"
+        "NAMES = {'my_test_extension', 'embedded_ext',\n"
+        "         'sp_pkg', 'sp_pkg.sp_submod',\n"
+        "         'm\\xf6dul_mp', 'm\\xf6dul_sp'}\n"
         "class StaticExtensionImporter:\n"
         "   _ORIGIN = \"static-extension\"\n"
         "   @classmethod\n"
         "   def find_spec(cls, fullname, path, target=None):\n"
-        "       if fullname in {'my_test_extension', 'embedded_ext'}:\n"
-        "           return spec_from_loader(fullname, cls, origin=cls._ORIGIN)\n"
+        "       if fullname in NAMES:\n"
+        "           return spec_from_loader(fullname, cls, origin=cls._ORIGIN,\n"
+        "                                   is_package=(fullname == 'sp_pkg'))\n"
         "       return None\n"
         "   @staticmethod\n"
         "   def create_module(spec):\n"
-        "       return create_static_module.create_module(spec)\n"
+        "       mod = csm.create_module(spec)\n"
+        "       print(f'created {ascii(spec.name)}: '\n"
+        "             f'in sys.modules={spec.name in sys.modules}')\n"
+        "       return mod\n"
         "   @staticmethod\n"
         "   def exec_module(module):\n"
-        "       create_static_module.exec_module(module)\n"
+        "       csm.exec_module(module)\n"
         "       module.executed = 'yes'\n"
         "sys.meta_path.append(StaticExtensionImporter)\n"
+        "def spec(name):\n"
+        "   return spec_from_loader(name, StaticExtensionImporter)\n"
+        "def run_tests():\n"
+        "   # Multi-phase initialization\n"
+        "   import my_test_extension\n"
+        "   print(my_test_extension)\n"
+        "   print(f'{my_test_extension.executed=}')\n"
+        "   print(f'{my_test_extension.exec_slot_ran=}')\n"
+        "   # Single-phase initialization\n"
+        "   import embedded_ext\n"
+        "   print(embedded_ext)\n"
+        "   print(f'{embedded_ext.executed=}')\n"
+        "   # Single-phase submodule whose init only knows its short name\n"
+        "   import sp_pkg.sp_submod\n"
+        "   print(sp_pkg.sp_submod)\n"
+        "   print(f'{sp_pkg.sp_submod.__name__=}')\n"
+        "   print(f'{sys.modules[\"sp_pkg.sp_submod\"] is sp_pkg.sp_submod=}')\n"
+        "   print(f'{\"sp_submod\" in sys.modules=}')\n"
+        "   # Non-ASCII names\n"
+        "   mp = importlib.import_module('m\\xf6dul_mp')\n"
+        "   print(f'{ascii(mp.__name__)=} {mp.executed=}')\n"
+        "   try:\n"
+        "       importlib.import_module('m\\xf6dul_sp')\n"
+        "   except SystemError as exc:\n"
+        "       print(f'SystemError: {ascii(str(exc))}')\n"
+        "   else:\n"
+        "       print('no SystemError!')\n"
+        "   # Same name, different initfuncs: the first one wins\n"
+        "   a = csm.create_module(spec('same_name'), 0)\n"
+        "   b = csm.create_module(spec('same_name'), 1)\n"
+        "   print(f'{a.which=} {b.which=} {csm.initfunc_calls()=}')\n"
+        "   # Names registered in the inittab are refused\n"
+        "   for name in 'sys', 'create_static_module':\n"
+        "       try:\n"
+        "           csm.create_module(spec(name))\n"
+        "       except ImportError as exc:\n"
+        "           print(f'ImportError: {exc}')\n"
+        "       else:\n"
+        "           print(f'no ImportError for {name}!')\n"
+        "   print(f'{sys.modules[\"create_static_module\"] is csm=}')\n"
+        "   print(f'{csm.initfunc_calls()=}')\n"
     );
     if (result < 0) {
         fprintf(stderr, "PyRun_SimpleString() failed\n");
