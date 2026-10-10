@@ -7,6 +7,7 @@ import importlib.util
 import re
 import struct
 import time
+import types
 import unittest
 import unittest.mock
 import warnings
@@ -332,6 +333,97 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
         mod = importlib.util.module_from_spec(spec)
         with self.assertRaises(SyntaxError):
             spec.loader.exec_module(mod)
+
+    def test_find_spec_does_not_unmarshal_pyc(self):
+        files = {TESTMOD + pyc_ext: test_pyc}
+        self.makeZip(files)
+        zi = zipimport.zipimporter(TEMP_ZIP)
+        expected_path = os.path.join(TEMP_ZIP, TESTMOD + pyc_ext)
+
+        no_loads = types.SimpleNamespace(loads=unittest.mock.Mock(
+            side_effect=AssertionError("unexpected marshal.loads()")))
+        with unittest.mock.patch.object(zipimport, 'marshal', no_loads):
+            spec = zi.find_spec(TESTMOD)
+            self.assertEqual(spec.origin, expected_path)
+            self.assertEqual(zi.get_filename(TESTMOD), expected_path)
+
+        loads = unittest.mock.Mock(wraps=marshal.loads)
+        with unittest.mock.patch.object(zipimport, 'marshal',
+                                        types.SimpleNamespace(loads=loads)):
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        self.assertEqual(loads.call_count, 1)
+        self.assertEqual(mod.get_file(), expected_path)
+
+    def test_corrupt_pyc_body_defers_to_exec(self):
+        # A .pyc with a valid header but a corrupt body is selected by
+        # find_spec() (there is no fallback to the .py, as before); the error
+        # is raised when the module is executed.
+        header = test_pyc[:16]
+        cases = [
+            (b'', EOFError),
+            (b'\xff\xff\xff', ValueError),
+            (marshal.dumps(42), TypeError),
+        ]
+        for body, exc in cases:
+            with self.subTest(body=body):
+                files = {TESTMOD + ".py": test_src,
+                         TESTMOD + pyc_ext: header + body}
+                self.makeZip(files)
+                zi = zipimport.zipimporter(TEMP_ZIP)
+                zi.invalidate_caches()
+
+                spec = zi.find_spec(TESTMOD)
+                self.assertEqual(spec.origin,
+                                 os.path.join(TEMP_ZIP, TESTMOD + pyc_ext))
+                mod = importlib.util.module_from_spec(spec)
+                with self.assertRaises(exc):
+                    spec.loader.exec_module(mod)
+
+    def test_get_data_prefix(self):
+        data = os.urandom(10000) + b'x' * 50000
+        self.makeZip({'data.bin': data})
+        zi = zipimport.zipimporter(TEMP_ZIP)
+        toc_entry = zi._get_files()['data.bin']
+        self.assertEqual(zipimport._get_data(TEMP_ZIP, toc_entry), data)
+        for size in (0, 1, 16, 1023, 1024, 5000, 59999, 60000, 100000):
+            with self.subTest(size=size):
+                prefix = zipimport._get_data(TEMP_ZIP, toc_entry, size)
+                self.assertGreaterEqual(len(prefix), min(size, len(data)))
+                self.assertEqual(prefix, data[:len(prefix)])
+
+    def test_find_spec_reads_only_pyc_header(self):
+        big_co = compile(f"x = {os.urandom(100_000)!r}\n", "<big>", "exec")
+        big_pyc = make_pyc(big_co, NOW, 0)
+        self.assertGreater(len(big_pyc), 100_000)
+        self.makeZip({TESTMOD + pyc_ext: big_pyc})
+        zi = zipimport.zipimporter(TEMP_ZIP)
+        zi._get_files()  # read the directory before counting
+
+        reads = []
+        real_open_code = zipimport._io.open_code
+
+        class CountingFile:
+            def __init__(self, f):
+                self._f = f
+            def __enter__(self):
+                return self
+            def __exit__(self, *exc_info):
+                self._f.close()
+            def seek(self, *args):
+                return self._f.seek(*args)
+            def read(self, size=-1):
+                data = self._f.read(size)
+                reads.append(len(data))
+                return data
+
+        fake_io = types.SimpleNamespace(
+            open_code=lambda path: CountingFile(real_open_code(path)))
+        with unittest.mock.patch.object(zipimport, '_io', fake_io):
+            spec = zi.find_spec(TESTMOD)
+        self.assertEqual(spec.origin, os.path.join(TEMP_ZIP, TESTMOD + pyc_ext))
+        self.assertGreater(sum(reads), 0)
+        self.assertLess(sum(reads), 4096)
 
     def testPyc(self):
         files = {TESTMOD + pyc_ext: test_pyc}
@@ -1129,6 +1221,35 @@ class DeflateCompressedZipImportTestCase(UncompressedZipImportTestCase):
 @support.requires_zstd()
 class ZStdCompressedZipImportTestCase(UncompressedZipImportTestCase):
     compression = ZIP_ZSTANDARD
+
+
+class DecompressPrefixTestCase(unittest.TestCase):
+
+    @support.requires_zstd()
+    def test_zstd_concatenated_frames(self):
+        from compression import zstd
+        data = b'abc' + bytes(range(256)) * 10
+        raw = zstd.compress(data[:3]) + zstd.compress(data[3:])
+        for size in (1, 3, 4, 16, len(data), len(data) + 1):
+            with self.subTest(size=size):
+                prefix = zipimport._decompress_prefix(
+                    io.BytesIO(raw), 93, len(raw), size)
+                self.assertGreaterEqual(len(prefix), min(size, len(data)))
+                self.assertEqual(prefix, data[:len(prefix)])
+
+    @support.requires_zlib()
+    def test_deflate_small_chunks(self):
+        import zlib
+        data = os.urandom(5000)
+        co = zlib.compressobj(wbits=-15)
+        raw = co.compress(data) + co.flush()
+        with unittest.mock.patch.object(zipimport, '_PREFIX_READ_CHUNK', 7):
+            for size in (1, 16, 4999, 5000, 6000):
+                with self.subTest(size=size):
+                    prefix = zipimport._decompress_prefix(
+                        io.BytesIO(raw), 8, len(raw), size)
+                    self.assertGreaterEqual(len(prefix), min(size, len(data)))
+                    self.assertEqual(prefix, data[:len(prefix)])
 
 
 class BadFileZipImportTestCase(unittest.TestCase):
