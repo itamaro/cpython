@@ -873,6 +873,17 @@ zipfile
   by the local file entries of removed members.
   (Contributed by Danny Lin in :gh:`51067`.)
 
+zipimport
+---------
+
+* :meth:`zipimporter.get_filename() <zipimport.zipimporter.get_filename>`
+  no longer compiles source modules, so importing a source module from a ZIP
+  archive now emits each :exc:`SyntaxWarning` only once. As a result, a
+  :exc:`SyntaxError` in a zipped source module is now raised when the module
+  is executed rather than when it is found, consistent with filesystem-based
+  loaders.
+  (Contributed by Harjoth Khara in :gh:`141276`.)
+
 zlib
 ----
 
