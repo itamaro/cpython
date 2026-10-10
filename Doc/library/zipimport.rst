@@ -129,9 +129,11 @@ zipimporter Objects
       .. versionadded:: 3.1
 
       .. versionchanged:: next
-         Source modules are no longer compiled to determine the file name,
-         so a :exc:`SyntaxError` in the module is raised when it is executed
-         rather than by this method.
+         Source modules are no longer compiled, and only the header of
+         bytecode files is read, to determine the file name.  A
+         :exc:`SyntaxError` in a source module, or a corrupt bytecode file,
+         is now reported when the module is executed rather than by this
+         method.
 
 
    .. method:: get_source(fullname)
