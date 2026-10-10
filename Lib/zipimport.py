@@ -16,6 +16,7 @@ import _frozen_importlib as _bootstrap  # for _verbose_message
 import _imp  # for check_hash_based_pycs
 import _io  # for open
 import marshal  # for loads
+import sys  # for implementation.cache_tag and flags.optimize
 import time  # for mktime
 
 __all__ = ['ZipImportError', 'zipimporter']
@@ -102,7 +103,12 @@ class zipimporter(_bootstrap_external._LoaderBasics):
         """
         module_info = _get_module_info(self, fullname)
         if module_info is not None:
-            return _bootstrap.spec_from_loader(fullname, self, is_package=module_info)
+            spec = _bootstrap.spec_from_loader(fullname, self, is_package=module_info)
+            if spec.origin is not None:
+                cached = _get_cached(self, spec.origin)
+                if cached is not None:
+                    spec.cached = cached
+            return spec
         else:
             # Not a module or regular package. See if this is a directory, and
             # therefore possibly a portion of a namespace package.
@@ -750,7 +756,13 @@ _PYC_HEADER_SIZE = 16
 # ImportError if the magic number or flags are bad or a checked hash-based
 # .pyc doesn't match the source, and returns False if a timestamp-based .pyc
 # is stale.  The rest of the file (the marshalled code) is not examined.
-def _validate_pyc_header(self, fullpath, fullname, data):
+# source_path is the path of the source file in the archive; it defaults to
+# the path of a legacy .pyc with the trailing 'c' removed.
+def _validate_pyc_header(self, fullpath, fullname, data, source_path=None):
+    if source_path is None:
+        # strip 'c' or 'o' from *.py[co]
+        assert fullpath[-1:] in ('c', 'o')
+        source_path = fullpath[:-1]
     exc_details = {
         'name': fullname,
         'path': fullpath,
@@ -763,7 +775,7 @@ def _validate_pyc_header(self, fullpath, fullname, data):
         check_source = flags & 0b10 != 0
         if (_imp.check_hash_based_pycs != 'never' and
                 (check_source or _imp.check_hash_based_pycs == 'always')):
-            source_bytes = _get_pyc_source(self, fullpath)
+            source_bytes = _get_source_data(self, source_path)
             if source_bytes is not None:
                 source_hash = _imp.source_hash(
                     _imp.pyc_magic_number_token,
@@ -774,7 +786,7 @@ def _validate_pyc_header(self, fullpath, fullname, data):
                     data, source_hash, fullname, exc_details)
     else:
         source_mtime, source_size = \
-            _get_mtime_and_size_of_source(self, fullpath)
+            _get_mtime_and_size_of_source(self, source_path)
 
         if source_mtime:
             # We don't use _bootstrap_external._validate_timestamp_pyc
@@ -827,14 +839,10 @@ def _parse_dostime(d, t):
         (t & 0x1F) * 2,     # bits 0..7: seconds / 2
         -1, -1, -1))
 
-# Given a path to a .pyc file in the archive, return the
-# modification time of the matching .py file and its size,
-# or (0, 0) if no source is available.
+# Given a path to a .py file in the archive, return its modification time
+# and size, or (0, 0) if it is not in the archive.
 def _get_mtime_and_size_of_source(self, path):
     try:
-        # strip 'c' or 'o' from *.py[co]
-        assert path[-1:] in ('c', 'o')
-        path = path[:-1]
         toc_entry = self._get_files()[path]
         # fetch the time stamp of the .py file for comparison
         # with an embedded pyc time stamp
@@ -846,20 +854,80 @@ def _get_mtime_and_size_of_source(self, path):
         return 0, 0
 
 
-# Given a path to a .pyc file in the archive, return the
-# contents of the matching .py file, or None if no source
-# is available.
-def _get_pyc_source(self, path):
-    # strip 'c' or 'o' from *.py[co]
-    assert path[-1:] in ('c', 'o')
-    path = path[:-1]
-
+# Given a path to a .py file in the archive, return its contents,
+# or None if it is not in the archive.
+def _get_source_data(self, path):
     try:
         toc_entry = self._get_files()[path]
     except KeyError:
         return None
     else:
         return _get_data(self.archive, toc_entry)
+
+
+# Given the path of a source file relative to the archive root, return the
+# path of its PEP 3147 cached bytecode inside the archive (honoring the
+# optimization level, see PEP 488), or None if caching is disabled.  Unlike
+# importlib.util.cache_from_source(), sys.pycache_prefix is not applied:
+# zipimport only reads bytecode from the archive itself.
+def _cache_path_in_archive(path):
+    tag = sys.implementation.cache_tag
+    if tag is None:
+        return None
+    head, tail = _bootstrap_external._path_split(path)
+    base, sep, rest = tail.rpartition('.')
+    filename = f'{base if base else rest}{sep}{tag}'
+    if sys.flags.optimize:
+        filename = f'{filename}.{_bootstrap_external._OPT}{sys.flags.optimize}'
+    filename += _bootstrap_external.BYTECODE_SUFFIXES[0]
+    return _bootstrap_external._path_join(
+        head, _bootstrap_external._PYCACHE, filename)
+
+
+# Return the value for ModuleSpec.cached of a module whose __file__ is
+# modpath, or None to keep the default.  For source files this is the
+# location of the cached bytecode inside the archive, whether or not it exists
+# (like the cached attribute of modules loaded from the file system).
+def _get_cached(self, modpath):
+    prefix = self.archive + path_sep
+    if not modpath.startswith(prefix):
+        return None
+    path = modpath[len(prefix):]
+    if not path.endswith(tuple(_bootstrap_external.SOURCE_SUFFIXES)):
+        return None
+    cache_path = _cache_path_in_archive(path)
+    if cache_path is None:
+        return None
+    return prefix + cache_path
+
+
+# Given the path of a source file in the archive, return the code object
+# from its PEP 3147 cached bytecode inside the archive, or None if there is
+# no usable cached bytecode (missing, bad header, or stale with respect to
+# the source), in which case the source should be compiled.  As with
+# importlib's SourceLoader, errors in the marshalled data are not hidden.
+def _get_cached_code(self, source_path, modpath, fullname):
+    cache_path = _cache_path_in_archive(source_path)
+    if cache_path is None:
+        return None
+    try:
+        toc_entry = self._get_files()[cache_path]
+    except KeyError:
+        return None
+    data = _get_data(self.archive, toc_entry)
+    try:
+        if not _validate_pyc_header(self, cache_path, fullname, data,
+                                    source_path=source_path):
+            return None
+    except (ImportError, EOFError):
+        return None
+    _bootstrap._verbose_message('code object from {}', toc_entry[0])
+    code = marshal.loads(data[_PYC_HEADER_SIZE:])
+    if not isinstance(code, _code_type):
+        raise ImportError(f'Non-code object in {toc_entry[0]!r}',
+                          name=fullname, path=toc_entry[0])
+    _imp._fix_co_filename(code, modpath)
+    return code
 
 
 # Get the code object associated with the module specified by 'fullname'.
@@ -891,15 +959,18 @@ def _get_module_code(self, fullname, *, load_code=True):
                 # bad magic number or non-matching mtime
                 # in byte code, try next
                 continue
+            if not isbytecode:
+                code = _get_cached_code(self, fullpath, modpath, fullname)
+                if code is None:
+                    data = _get_data(self.archive, toc_entry)
+                    code = _compile_source(modpath, data, fullname)
+                return code, ispackage, modpath
             data = _get_data(self.archive, toc_entry)
             code = None
-            if isbytecode:
-                try:
-                    code = _unmarshal_code(self, modpath, fullpath, fullname, data)
-                except ImportError as exc:
-                    import_error = exc
-            else:
-                code = _compile_source(modpath, data, fullname)
+            try:
+                code = _unmarshal_code(self, modpath, fullpath, fullname, data)
+            except ImportError as exc:
+                import_error = exc
             if code is None:
                 # bad magic number or non-matching mtime
                 # in byte code, try next

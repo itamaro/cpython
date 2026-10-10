@@ -28,6 +28,21 @@ Any files may be present in the ZIP archive, but importers are only invoked for
 corresponding :file:`.pyc` file, meaning that if a ZIP archive
 doesn't contain :file:`.pyc` files, importing may be rather slow.
 
+Bytecode can be included in two ways.  A :file:`.pyc` file next to the
+:file:`.py` file (or without one) is used in preference to the :file:`.py`
+file, unless it is stale or invalid.  Cached bytecode in a :file:`__pycache__`
+directory, as described in :pep:`3147` and :pep:`488` and as created by
+:mod:`compileall`, is used when the corresponding :file:`.py` file is present
+and the bytecode is up to date; otherwise the source is compiled.  Like for
+modules imported from the file system, the module's ``__file__`` is then the
+:file:`.py` file, and :attr:`ModuleSpec.cached
+<importlib.machinery.ModuleSpec.cached>` is the location of the cached
+bytecode in the archive.  :data:`sys.pycache_prefix` is not used for ZIP
+archives.
+
+.. versionchanged:: next
+   Cached bytecode in :file:`__pycache__` directories is used.
+
 .. versionchanged:: 3.15
    Zstandard (*zstd*) compressed zip file entries are supported.
 

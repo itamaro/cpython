@@ -884,6 +884,14 @@ zipimport
   loaders.
   (Contributed by Harjoth Khara in :gh:`141276`.)
 
+* :mod:`zipimport` now uses cached bytecode in :file:`__pycache__`
+  directories (:pep:`3147`), so a source tree precompiled with
+  :mod:`compileall` can be zipped and imported without compiling the
+  sources on every import.  :attr:`ModuleSpec.cached
+  <importlib.machinery.ModuleSpec.cached>` now reflects the location of the
+  cached bytecode inside the archive.
+  (Contributed by Itamar Oren in :gh:`69896`.)
+
 zlib
 ----
 
