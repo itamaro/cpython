@@ -269,9 +269,21 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", SyntaxWarning)
-            zi.get_filename(TESTMOD)
+            filename = zi.get_filename(TESTMOD)
 
         self.assertEqual(caught, [])
+        self.assertEqual(filename, os.path.join(TEMP_ZIP, TESTMOD + ".py"))
+
+    def test_get_filename_does_not_read_source(self):
+        files = {TESTMOD + ".py": test_src}
+        self.makeZip(files)
+        zi = zipimport.zipimporter(TEMP_ZIP)
+
+        with unittest.mock.patch.object(zipimport, '_get_data',
+                                        side_effect=AssertionError):
+            self.assertEqual(zi.get_filename(TESTMOD),
+                             os.path.join(TEMP_ZIP, TESTMOD + ".py"))
+            zi.find_spec(TESTMOD)
 
     def test_syntax_error_in_source_with_valid_pyc(self):
         bad_src = "x =\n"
@@ -288,6 +300,22 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         self.assertEqual(mod.get_file(), expected_path)
+
+    def test_syntax_error_in_source_with_stale_pyc(self):
+        bad_src = "x =\n"
+        files = {TESTMOD + ".py": bad_src,
+                 TESTMOD + pyc_ext: make_pyc(test_co, NOW, len(bad_src) + 1)}
+        self.makeZip(files)
+        zi = zipimport.zipimporter(TEMP_ZIP)
+        expected_path = os.path.join(TEMP_ZIP, TESTMOD + ".py")
+
+        spec = zi.find_spec(TESTMOD)
+        self.assertIsNotNone(spec)
+        self.assertEqual(spec.origin, expected_path)
+
+        mod = importlib.util.module_from_spec(spec)
+        with self.assertRaises(SyntaxError):
+            spec.loader.exec_module(mod)
 
     def test_syntax_error_in_package_init_no_fallthrough(self):
         packdir = TESTPACK + os.sep

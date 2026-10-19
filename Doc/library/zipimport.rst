@@ -128,6 +128,11 @@ zipimporter Objects
 
       .. versionadded:: 3.1
 
+      .. versionchanged:: next
+         Source modules are no longer compiled to determine the file name,
+         so a :exc:`SyntaxError` in the module is raised when it is executed
+         rather than by this method.
+
 
    .. method:: get_source(fullname)
 
