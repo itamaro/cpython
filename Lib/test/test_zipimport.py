@@ -15,6 +15,7 @@ import warnings
 from test import support
 from test.support import import_helper
 from test.support import os_helper
+from test.support import script_helper
 
 from zipfile import ZipFile, ZipInfo, ZIP_STORED, ZIP_DEFLATED, ZIP_ZSTANDARD
 
@@ -424,6 +425,167 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
         self.assertEqual(spec.origin, os.path.join(TEMP_ZIP, TESTMOD + pyc_ext))
         self.assertGreater(sum(reads), 0)
         self.assertLess(sum(reads), 4096)
+
+    # PEP 3147 __pycache__ support.
+
+    def pycachePath(self, source_path, optimization=None):
+        # Path of the cached bytecode of source_path inside the archive.
+        head, tail = os.path.split(source_path)
+        cached = importlib.util.cache_from_source(
+            tail, optimization=optimization)
+        return os.path.join(head, '__pycache__', os.path.basename(cached))
+
+    def makePycacheZip(self, source=test_src, cache_src="SRC = 'cache'\n",
+                       source_name=TESTMOD + ".py", header=None, **files):
+        # The cached code differs from the source code so that tests can
+        # tell which one was used.  Its header matches the source unless
+        # header is given.
+        if header is None:
+            header = make_pyc(compile("", "", "exec"), NOW, len(source))[:16]
+        cache_co = compile(cache_src, "<cache>", "exec")
+        files = {source_name: source,
+                 self.pycachePath(source_name): header + marshal.dumps(cache_co),
+                 **files}
+        self.makeZip(files)
+
+    def importFromZip(self, name):
+        sys.path.insert(0, TEMP_ZIP)
+        return importlib.import_module(name)
+
+    def test_pycache_used(self):
+        self.makePycacheZip(source="SRC = 'py'\n")
+        source_path = os.path.join(TEMP_ZIP, TESTMOD + ".py")
+        cache_path = os.path.join(TEMP_ZIP, self.pycachePath(TESTMOD + ".py"))
+
+        with unittest.mock.patch.object(zipimport, '_compile_source',
+                                        side_effect=AssertionError):
+            mod = self.importFromZip(TESTMOD)
+        self.assertEqual(mod.SRC, 'cache')
+        self.assertEqual(mod.__file__, source_path)
+        self.assertEqual(mod.__spec__.cached, cache_path)
+
+    def test_pycache_code_filename(self):
+        # co_filename is fixed up to refer to the source in the archive.
+        self.makePycacheZip(cache_src=test_src)
+        mod = self.importFromZip(TESTMOD)
+        self.assertEqual(mod.get_file.__code__.co_filename,
+                         os.path.join(TEMP_ZIP, TESTMOD + ".py"))
+
+    def test_pycache_package(self):
+        init = os.path.join(TESTPACK, "__init__.py")
+        self.makePycacheZip(source_name=init, source="SRC = 'py'\n")
+        mod = self.importFromZip(TESTPACK)
+        self.assertEqual(mod.SRC, 'cache')
+        self.assertEqual(mod.__file__, os.path.join(TEMP_ZIP, init))
+        self.assertEqual(mod.__spec__.cached,
+                         os.path.join(TEMP_ZIP, self.pycachePath(init)))
+
+    def test_pycache_in_subdirectory_package(self):
+        source_name = os.path.join(TESTPACK, TESTMOD + ".py")
+        self.makePycacheZip(source_name=source_name,
+                            **{os.path.join(TESTPACK, "__init__.py"): ""})
+        mod = self.importFromZip(f"{TESTPACK}.{TESTMOD}")
+        self.assertEqual(mod.SRC, 'cache')
+        self.assertEqual(mod.__spec__.cached,
+                         os.path.join(TEMP_ZIP, self.pycachePath(source_name)))
+
+    def test_pycache_stale(self):
+        source = "SRC = 'py'\n"
+        cases = {
+            'mtime': make_pyc(compile("", "", "exec"), NOW - 3600, len(source)),
+            'size': make_pyc(compile("", "", "exec"), NOW, len(source) + 1),
+            'magic': b'\0\0\0\0' + make_pyc(
+                compile("", "", "exec"), NOW, len(source))[4:],
+            'flags': make_pyc(compile("", "", "exec"), NOW, len(source))[:4]
+                     + struct.pack('<I', 0b100) + bytes(8),
+            'truncated': make_pyc(compile("", "", "exec"), NOW, len(source))[:8],
+        }
+        for case, header in cases.items():
+            with self.subTest(case):
+                self.makePycacheZip(source=source, header=header[:16])
+                zipimport._zip_directory_cache.clear()
+                mod = self.importFromZip(TESTMOD)
+                self.assertEqual(mod.SRC, 'py')
+                del sys.modules[TESTMOD]
+
+    def test_pycache_corrupt_body(self):
+        # As with importlib's SourceLoader, a valid header with a corrupt
+        # body is an error rather than a reason to compile the source.
+        source = "SRC = 'py'\n"
+        header = make_pyc(compile("", "", "exec"), NOW, len(source))[:16]
+        self.makeZip({TESTMOD + ".py": source,
+                      self.pycachePath(TESTMOD + ".py"): header + b'\xff'})
+        sys.path.insert(0, TEMP_ZIP)
+        with self.assertRaises(ValueError):
+            importlib.import_module(TESTMOD)
+
+    def test_pycache_hash_based(self):
+        source = "SRC = 'py'\n"
+        other_source = "SRC = 'other'\n"
+        for checked in (True, False):
+            for matching in (True, False):
+                with self.subTest(checked=checked, matching=matching):
+                    hashed = source if matching else other_source
+                    flags = 0b11 if checked else 0b01
+                    header = (importlib.util.MAGIC_NUMBER
+                              + struct.pack('<I', flags)
+                              + importlib.util.source_hash(hashed.encode()))
+                    self.makePycacheZip(source=source, header=header)
+                    zipimport._zip_directory_cache.clear()
+                    mod = self.importFromZip(TESTMOD)
+                    expected = 'cache' if matching or not checked else 'py'
+                    self.assertEqual(mod.SRC, expected)
+                    del sys.modules[TESTMOD]
+
+    def test_pycache_ignored_without_source(self):
+        # PEP 3147: bytecode in __pycache__ is only used as a cache.
+        self.makeZip({self.pycachePath(TESTMOD + ".py"): test_pyc})
+        zi = zipimport.zipimporter(TEMP_ZIP)
+        self.assertIsNone(zi.find_spec(TESTMOD))
+
+    def test_legacy_pyc_takes_precedence_over_pycache(self):
+        self.makePycacheZip(**{TESTMOD + pyc_ext: test_pyc})
+        pyc_path = os.path.join(TEMP_ZIP, TESTMOD + pyc_ext)
+        mod = self.importFromZip(TESTMOD)
+        self.assertEqual(mod.__file__, pyc_path)
+        self.assertEqual(mod.__spec__.cached, pyc_path)
+        self.assertFalse(hasattr(mod, 'SRC'))
+
+    def test_pycache_unused_if_cache_tag_is_none(self):
+        self.makePycacheZip(source="SRC = 'py'\n")
+        with unittest.mock.patch.object(sys.implementation, 'cache_tag', None):
+            mod = self.importFromZip(TESTMOD)
+            self.assertEqual(mod.SRC, 'py')
+            self.assertIsNone(mod.__spec__.cached)
+
+    def test_cached_without_pycache(self):
+        # Like for modules loaded from the file system, cached is the
+        # location of the bytecode cache whether or not it exists.
+        self.makeZip({TESTMOD + ".py": test_src})
+        expected = os.path.join(TEMP_ZIP, self.pycachePath(TESTMOD + ".py"))
+        zi = zipimport.zipimporter(TEMP_ZIP)
+        self.assertEqual(zi.find_spec(TESTMOD).cached, expected)
+        # sys.pycache_prefix is not applied to the archive.
+        with unittest.mock.patch.object(sys, 'pycache_prefix', TEMP_DIR):
+            self.assertEqual(zi.find_spec(TESTMOD).cached, expected)
+
+    def test_pycache_optimization_level(self):
+        source = "SRC = 'py'\n"
+        header = make_pyc(compile("", "", "exec"), NOW, len(source))[:16]
+        files = {TESTMOD + ".py": source}
+        for opt in ('', 1, 2):
+            co = compile(f"SRC = 'opt{opt}'", "<cache>", "exec")
+            files[self.pycachePath(TESTMOD + ".py", opt)] = (
+                header + marshal.dumps(co))
+        self.makeZip(files)
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); "
+                f"import {TESTMOD}; print({TESTMOD}.SRC)")
+        for flags, expected in (((), 'opt'), (('-O',), 'opt1'),
+                                (('-OO',), 'opt2')):
+            with self.subTest(flags=flags):
+                res = script_helper.assert_python_ok(
+                    *flags, '-c', code, TEMP_ZIP)
+                self.assertEqual(res.out.decode().strip(), expected)
 
     def testPyc(self):
         files = {TESTMOD + pyc_ext: test_pyc}

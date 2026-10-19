@@ -1,0 +1,7 @@
+:mod:`zipimport` now uses cached bytecode in :file:`__pycache__` directories
+(:pep:`3147` and :pep:`488`) when the corresponding source file is present
+and the bytecode is up to date, instead of always compiling the source.
+:attr:`ModuleSpec.cached <importlib.machinery.ModuleSpec.cached>` of a
+source module imported from a ZIP archive now refers to its cached bytecode
+inside the archive, even when :data:`sys.pycache_prefix` is set. A ``.pyc``
+file next to the ``.py`` file still takes precedence.
