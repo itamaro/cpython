@@ -611,6 +611,11 @@ else:
         if prefix and not stdlib_dir:
             stdlib_dir = joinpath(prefix, STDLIB_SUBDIR)
 
+    if PREFIX and not prefix:
+        prefix = PREFIX
+        if not any(isfile(joinpath(prefix, f)) for f in STDLIB_LANDMARKS):
+            warn('Could not find platform independent libraries <prefix>')
+
     if not prefix:
         prefix = abspath('')
         warn('Could not find platform independent libraries <prefix>')
