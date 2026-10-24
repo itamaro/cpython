@@ -577,7 +577,7 @@ else:
             stdlib_dir = None
 
 
-    # First try to detect prefix by searching from our runtime library, if known.
+    # First try to detect prefix by looking alongside our runtime library, if known
     if library and not prefix:
         library_dir = dirname(library)
         if ZIP_LANDMARK:
@@ -588,14 +588,10 @@ else:
             else:
                 prefix = search_up(library_dir, ZIP_LANDMARK)
         if STDLIB_SUBDIR and STDLIB_LANDMARKS and not prefix:
-            # A relative loader path may have been resolved against an earlier
-            # working directory.
-            if os_name != 'nt' and isabs(library):
-                prefix = search_up(dirname(abspath(library)), *STDLIB_LANDMARKS)
-            elif any(isfile(joinpath(library_dir, f)) for f in STDLIB_LANDMARKS):
+            if any(isfile(joinpath(library_dir, f)) for f in STDLIB_LANDMARKS):
                 prefix = library_dir
-            if prefix and not stdlib_dir_was_set_in_config:
-                stdlib_dir = joinpath(prefix, STDLIB_SUBDIR)
+                if not stdlib_dir_was_set_in_config:
+                    stdlib_dir = joinpath(prefix, STDLIB_SUBDIR)
 
 
     # Detect prefix by looking for zip file
@@ -615,6 +611,19 @@ else:
     # Detect prefix by searching from our executable location for the stdlib_dir
     if STDLIB_SUBDIR and STDLIB_LANDMARKS and executable_dir and not prefix:
         prefix = search_up(executable_dir, *STDLIB_LANDMARKS)
+        if prefix and not stdlib_dir:
+            stdlib_dir = joinpath(prefix, STDLIB_SUBDIR)
+
+
+    # Detect prefix by searching from our runtime library for the stdlib_dir.
+    # This only runs when the executable location did not lead to a prefix,
+    # e.g. a launcher that sets argv[0] to a path outside the installation,
+    # or an application embedding libpython from a relocated prefix.
+    # Only an absolute path is used: a relative loader path may have been
+    # resolved against an earlier working directory.
+    if (STDLIB_SUBDIR and STDLIB_LANDMARKS and not prefix
+            and library and os_name != 'nt' and isabs(library)):
+        prefix = search_up(dirname(abspath(library)), *STDLIB_LANDMARKS)
         if prefix and not stdlib_dir:
             stdlib_dir = joinpath(prefix, STDLIB_SUBDIR)
 
