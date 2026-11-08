@@ -1,0 +1,3 @@
+The installed pkg-config files (``python-3.16.pc`` and
+``python-3.16-embed.pc``) now define ``prefix`` relative to their own
+location, so they stay correct when the installation is moved.
