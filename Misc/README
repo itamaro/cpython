@@ -16,6 +16,9 @@ python.pc.in            Package configuration info template for pkg-config
 README                  The file you're reading now
 README.AIX              Information about using Python on AIX
 README.valgrind         Information for Valgrind users, see valgrind-python.supp
+relocatable-script-header.in
+                        First lines of installed Python scripts with
+                        --enable-relocatable
 SpecialBuilds.txt       Describes extra symbols you can set for debug builds
 svnmap.txt              Map of old SVN revs and branches to hg changeset ids,
                         help history-digging

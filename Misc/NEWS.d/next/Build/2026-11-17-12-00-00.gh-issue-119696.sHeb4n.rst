@@ -1,0 +1,5 @@
+With ``--enable-relocatable``, the installed ``idle3``, ``pydoc3`` and
+``python-config`` Python scripts no longer start with the absolute path of the
+interpreter. They run the interpreter by its location relative to the script,
+which also works when that path contains spaces or is too long for a ``#!``
+line.

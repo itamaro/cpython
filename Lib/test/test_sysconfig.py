@@ -731,6 +731,27 @@ class TestSysConfig(unittest.TestCase, VirtualEnvironmentMixin):
                 self.assertEqual(os.path.realpath(resolved),
                                  os.path.realpath(sys.base_prefix))
 
+    @unittest.skipIf(os.name != 'posix', 'scripts are only installed on POSIX')
+    @unittest.skipIf(is_wasi or is_android or is_apple_mobile,
+                     'no installed scripts on this platform')
+    @unittest.skipIf(get_config_var('RELOCATABLE') != 'yes',
+                     'requires --enable-relocatable')
+    @unittest.skipIf(is_python_build(),
+                     'scripts are only installed by make install')
+    @requires_subprocess()
+    def test_relocatable_script(self):
+        script = os.path.join(sys._stdlib_dir,
+                              os.path.basename(get_config_var('LIBPL')),
+                              'python-config.py')
+        if not os.path.exists(script):
+            self.skipTest(f'{script} not found')
+        with open(script, encoding='utf-8') as f:
+            self.assertNotIn(get_config_var('EXENAME'), f.readline())
+        proc = subprocess.run([script, '--prefix'],
+                              capture_output=True, text=True, check=True)
+        self.assertEqual(os.path.realpath(proc.stdout.rstrip('\n')),
+                         os.path.realpath(sys.base_prefix))
+
     @unittest.skipIf(os.name != 'posix', '_sysconfig-vars JSON file is only available on POSIX')
     @unittest.skipIf(is_wasi, "_sysconfig-vars JSON file currently isn't available on WASI")
     @unittest.skipIf(is_android or is_apple_mobile, 'Android and iOS change the prefix')
@@ -809,11 +830,11 @@ class TestSysConfig(unittest.TestCase, VirtualEnvironmentMixin):
         if not os.path.isfile(script):
             self.skipTest(f'{script!r} does not exist')
         with open(script, encoding='utf-8') as f:
-            if f.readline().rstrip() != '#!/bin/sh':
-                self.skipTest('python-config is not the shell script variant')
-
-        with open(script, encoding='utf-8') as f:
             script_text = f.read()
+        # With --enable-relocatable, the Python variant is run by /bin/sh too.
+        if (not script_text.startswith('#!/bin/sh\n')
+                or script_text.startswith("#!/bin/sh\n'''exec'")):
+            self.skipTest('python-config is not the shell script variant')
         makefile_vars = _parse_makefile(sysconfig.get_makefile_filename())
         configured_prefix = makefile_vars['prefix']
 

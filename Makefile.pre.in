@@ -2929,19 +2929,38 @@ libinstall:	all $(srcdir)/Modules/xxmodule.c
 		-o 0 -o 1 -o 2 $(COMPILEALL_OPTS) -d $(LIBDEST)/site-packages -f \
 		-x badsyntax $(DESTDIR)$(LIBDEST)/site-packages
 
+# The first lines of an installed Python script. With --enable-relocatable,
+# the script finds the interpreter relative to itself: the shell variable
+# "rel" is the path from its directory to $(BINDIR), or "no" if there is none.
+SCRIPT_HEADER= \
+	if test "$(RELOCATABLE)" = yes && test "$$rel" != no; then \
+		sed -e "s,@PYTHON@,$$rel/python$(LDVERSION)$(EXE)," $(srcdir)/Misc/relocatable-script-header.in; \
+	else \
+		printf '%s\n' '\#!$(EXENAME)'; \
+	fi
+
 # bpo-21536: Misc/python-config.sh is generated in the build directory
 # from $(srcdir)Misc/python-config.sh.in.
-python-config: $(srcdir)/Misc/python-config.in Misc/python-config.sh
+python-config: $(srcdir)/Misc/python-config.in Misc/python-config.sh $(srcdir)/Misc/relocatable-script-header.in
 	@ # Substitution happens here, as the completely-expanded BINDIR
 	@ # is not available in configure
-	sed -e "s,@EXENAME@,$(EXENAME)," < $(srcdir)/Misc/python-config.in >python-config.py
+	@ # python-config.py is installed in $(LIBPL): find $(BINDIR) from there.
+	rel=; dir='$(LIBPL)'; bin='$(BINDIR)'; \
+	while test "$$dir" != '$(exec_prefix)' && test "$$dir" != /; do \
+		rel="$$rel/.."; dir=`dirname "$$dir"`; \
+	done; \
+	case $$dir:$$bin in \
+		'$(exec_prefix)':'$(exec_prefix)'/*) rel=$$rel$${bin#'$(exec_prefix)'};; \
+		*) rel=no;; \
+	esac; \
+	($(SCRIPT_HEADER); sed 1d $(srcdir)/Misc/python-config.in) >python-config.py
 	@ # Replace makefile compat. variable references with shell script compat. ones; $(VAR) -> ${VAR}
 	LC_ALL=C sed -e 's,\$$(\([A-Za-z0-9_]*\)),\$$\{\1\},g' < Misc/python-config.sh >python-config
 	@ # On Darwin, always use the python version of the script, the shell
 	@ # version doesn't use the compiler customizations that are provided
 	@ # in python (_osx_support.py).
 	@if test `uname -s` = Darwin; then \
-		cp python-config.py python-config; \
+		(rel=; $(SCRIPT_HEADER); sed 1d $(srcdir)/Misc/python-config.in) >python-config; \
 	fi
 
 # With --enable-relocatable, the installed pkg-config files define prefix
@@ -2972,14 +2991,14 @@ BUILD_SCRIPTS_DIR=build/scripts-$(VERSION)
 SCRIPT_IDLE=$(BUILD_SCRIPTS_DIR)/idle$(VERSION)
 SCRIPT_PYDOC=$(BUILD_SCRIPTS_DIR)/pydoc$(VERSION)
 
-$(SCRIPT_IDLE): $(srcdir)/Tools/scripts/idle3
+$(SCRIPT_IDLE): $(srcdir)/Tools/scripts/idle3 $(srcdir)/Misc/relocatable-script-header.in
 	@$(MKDIR_P) $(BUILD_SCRIPTS_DIR)
-	sed -e "s,/usr/bin/env python3,$(EXENAME)," < $(srcdir)/Tools/scripts/idle3 > $@
+	(rel=; $(SCRIPT_HEADER); sed 1d $(srcdir)/Tools/scripts/idle3) > $@
 	@chmod +x $@
 
-$(SCRIPT_PYDOC): $(srcdir)/Tools/scripts/pydoc3
+$(SCRIPT_PYDOC): $(srcdir)/Tools/scripts/pydoc3 $(srcdir)/Misc/relocatable-script-header.in
 	@$(MKDIR_P) $(BUILD_SCRIPTS_DIR)
-	sed -e "s,/usr/bin/env python3,$(EXENAME)," < $(srcdir)/Tools/scripts/pydoc3 > $@
+	(rel=; $(SCRIPT_HEADER); sed 1d $(srcdir)/Tools/scripts/pydoc3) > $@
 	@chmod +x $@
 
 .PHONY: scripts
